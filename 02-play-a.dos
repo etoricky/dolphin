@@ -1,0 +1,32 @@
+colNames = ["code", "tradetime", "price"]
+colTypes = [SYMBOL, TIMESTAMP, DOUBLE]
+share(table=streamTable(1:0, colNames, colTypes), sharedName="pubTable")
+
+tableInsert(pubTable, "000001SZ", 2023.12.15T09:30:00.000, 10.5)
+tableInsert(pubTable, "000001SZ", 2023.12.15T09:31:00.000, 10.6)
+tableInsert(pubTable, "000001SZ", 2023.12.15T09:32:00.000, 10.7)
+tableInsert(pubTable, "000001SZ", 2023.12.15T09:33:00.000, 10.8)
+tableInsert(pubTable, "000001SZ", 2023.12.15T09:34:00.000, 10.7)
+tableInsert(pubTable, "000001SZ", 2023.12.15T09:35:00.000, 10.6)
+
+res = select * from pubTable where price>=10.7
+
+price = exec price from pubTable
+tradetime = exec tradetime from pubTable
+plot(price, tradetime, title="minute price", chartType=LINE)
+
+dropStreamTable(tableName="pubTable")
+
+colNames = ["code", "tradetime", "price"]
+colTypes = [SYMBOL, TIMESTAMP, DOUBLE]
+share(table=streamTable(1:0, colNames, colTypes), sharedName="pubTable")
+enableTableCachePurge(table=pubTable, cacheSize=1000)
+dropStreamTable(tableName="pubTable")
+
+colNames = ["code", "tradetime", "price"]
+colTypes = [SYMBOL, TIMESTAMP, DOUBLE]
+share(table=keyedStreamTable(`code`tradetime, 1:0, colNames, colTypes), sharedName="pubTable")
+tableInsert(pubTable, "000001SZ", 2023.12.15T09:30:00.000, 10.5)
+tableInsert(pubTable, "000001SZ", 2023.12.15T09:30:00.000, 10.6)
+res = select * from pubTable where code="000001SZ"
+dropStreamTable(tableName="pubTable")

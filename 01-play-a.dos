@@ -1,0 +1,9 @@
+use ta
+
+close = 1..20
+bret = bBands(close)
+print(bret)
+
+close = randNormal(50, 1, 20)
+rret = rsi(close)
+print(rret)

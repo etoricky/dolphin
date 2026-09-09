@@ -1,0 +1,43 @@
+// links
+https://docs.dolphindb.cn/zh/modules/gtja191Alpha/191alpha.html
+
+// plugins
+// vscode web browser
+// dolphindb
+
+// login
+getHomeDir()
+print('C:\\d\\hub\\dolphin\\run\\DolphinDB_Win64_V2.00.19\\server\\modules')
+use gtja191Alpha
+use gtja191Prepare
+login('admin', '123456')
+rawData = loadText("C:\\d\\hub\\dolphin\\run\\DolphinDB_Win64_V2.00.19\\server\\modules\\datatest.csv")
+startTime = timestamp(2010.01.01)
+endTime = timestamp(2010.01.31)
+data = prepareData(rawData=rawData, startTime=startTime, endTime=endTime, securityidName="securityid", tradetimeName="tradetime", openName="open", closeName="close", highName="high", lowName="low", volumeName="vol", vwapName="vwap", indexCloseName="index_close", indexOpenName="index_open")
+
+// alpha login
+use gtja191Alpha
+open, close, vol = panel(data.tradetime, data.securityid, [data.open, data.close, data.vol])
+res = gtjaAlpha1(open, close, vol)
+//or you can use dictionary
+input = dict(`open`close`vol, panel(data.tradetime, data.securityid, [data.open, data.close, data.vol]))
+res = gtjaAlpha1(input.open, input.close, input.vol)
+
+// alpha cal
+use gtja191Prepare
+res = gtjaCalAlpha1(data, startTime, endTime)
+
+// stream prepare
+inputSchema = table(1:0, ["SecurityID","TradeTime","open","close","vol"], [SYMBOL,TIMESTAMP,DOUBLE,DOUBLE,DOUBLE])
+resultStream = table(10000:0, ["SecurityID","TradeTime","factor"], [SYMBOL,TIMESTAMP,DOUBLE])
+use gtja191Alpha
+metrics = <[SecurityID,gtjaAlpha1(open,close,vol)]>
+streamEngine = streamEngineParser(name="gtjaAlpha1Parser", metrics=metrics, dummyTable=inputSchema, outputTable=resultStream, keyColumn="SecurityID", timeColumn=`tradetime, triggeringPattern='keyCount', triggeringInterval=4000)
+
+// stream mon
+getStreamEngineStat()
+
+// stream output
+streamEngine.append!((select SecurityID, TradeTime, close, high, low from data order by TradeTime))
+res = exec factor from resultStream pivot by TradeTime, SecurityID
