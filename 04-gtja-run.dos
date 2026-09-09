@@ -33,7 +33,11 @@ inputSchema = table(1:0, ["SecurityID","TradeTime","open","close","vol"], [SYMBO
 resultStream = table(10000:0, ["SecurityID","TradeTime","factor"], [SYMBOL,TIMESTAMP,DOUBLE])
 use gtja191Alpha
 metrics = <[SecurityID,gtjaAlpha1(open,close,vol)]>
-streamEngine = streamEngineParser(name="gtjaAlpha1Parser", metrics=metrics, dummyTable=inputSchema, outputTable=resultStream, keyColumn="SecurityID", timeColumn=`tradetime, triggeringPattern='keyCount', triggeringInterval=4000)
+// @Ricky here
+streamEngine = streamEngineParser(name="gtjaAlpha1Parser", metrics=metrics,
+dummyTable=inputSchema, outputTable=resultStream,
+keyColumn="SecurityID", timeColumn=`tradetime,
+triggeringPattern='keyCount', triggeringInterval=4000)
 
 // stream mon
 getStreamEngineStat()
