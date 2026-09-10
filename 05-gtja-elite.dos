@@ -1,0 +1,41 @@
+// import
+use gtja191Alpha
+use gtja191Prepare
+
+// data
+login('admin', '123456')
+rawData = loadText("C:\\d\\hub\\dolphin\\run\\DolphinDB_Win64_V2.00.19\\server\\modules\\datatest.csv")
+startTime = timestamp(2010.01.01)
+endTime = timestamp(2010.01.31)
+data = prepareData(rawData=rawData, startTime=startTime, endTime=endTime, securityidName="securityid", tradetimeName="tradetime", openName="open", closeName="close", highName="high", lowName="low", volumeName="vol", vwapName="vwap", indexCloseName="index_close", indexOpenName="index_open")
+
+// functions
+def repN(x, n){
+    return take(x, n)
+}
+def matrixToNarrow(res, alphaId){
+    colNm = res.colNames()
+    rowNm = res.rowNames()
+    nRow  = size(rowNm)
+    n     = nRow * size(colNm)
+    // securityId：每个列名重复 nRow 次，与 flatten 的列优先顺序对齐
+    securityId = flatten(each(repN, colNm, nRow))
+    return table(
+        take(rowNm, n)   as tradeTime,     // 行标签循环平铺（= rowNames 重复 nCol 次）
+        securityId       as securityId,
+        take(alphaId, n) as alphaId,       // 常量因子名
+        flatten(res)     as alphaValue     // 矩阵按列优先展开
+    )
+}
+
+// create
+alphaLocal = table(1:0,`tradeTime`securityId`alphaId`alphaValue,[TIMESTAMP, SYMBOL, SYMBOL, DOUBLE])
+share alphaLocal as alphaShare;
+
+// calculate
+skipList = [21, 30, 116, 147]
+for(i in 1:5) {
+    if(i in skipList) continue
+    m = parseExpr("gtja191Prepare::gtjaCalAlpha" + string(i) + "(data, startTime, endTime)").eval()
+    alphaLocal.append!(matrixToNarrow(m, "ja" + string(i)))
+}
