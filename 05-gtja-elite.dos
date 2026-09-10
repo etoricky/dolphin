@@ -34,8 +34,22 @@ share alphaLocal as alphaShare;
 
 // calculate
 skipList = [21, 30, 116, 147]
-for(i in 1:5) {
+for(i in 1:100) {
     if(i in skipList) continue
     m = parseExpr("gtja191Prepare::gtjaCalAlpha" + string(i) + "(data, startTime, endTime)").eval()
     alphaLocal.append!(matrixToNarrow(m, "ja" + string(i)))
 }
+
+// get
+def getAlphaBySecurityId(sid){
+    return select alphaValue from alphaShare where securityId = sid pivot by tradeTime, alphaId
+}
+
+def getSecurityIds() {
+    return select distinct securityId from alphaShare order by securityId;
+}
+
+// call
+getSecurityIds()
+print("sz000001")
+getAlphaBySecurityId("sz000001")
