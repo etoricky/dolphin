@@ -19,6 +19,8 @@ DDB_HOME = r"C:\d\hub\run\DolphinDB_Win64_V2.00.19\server"
 # 因子公式的「源文件」放在客户端，由 loader.py 注入到服务端会话中执行，
 # 不再依赖服务端的 {home}/modules 目录（服务端已经没有任何因子模块了）。
 MODULES_LOCAL = r"c:\d\hub\dolphin\modules-local"
+# lab 当前用不到的模块（alphalens / ta / mytt / wq101alpha / *Res / *StreamTest）
+# 已移到同级的 modules-unused/，需要时再移回来并加进下面的 LOCAL_MODULES。
 
 # 本地模块名（不含 .dos 后缀），按依赖顺序排列
 LOCAL_MODULES = ("gtja191Alpha", "gtja191Prepare")
