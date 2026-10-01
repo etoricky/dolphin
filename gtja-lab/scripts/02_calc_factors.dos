@@ -8,6 +8,10 @@
  *
  *   输出长表：tradetime, securityid, alphaId, alphaValue
  *   因子矩阵行序 = 交易日升序，列序 = 证券代码升序（panel 会排序）
+ *
+ *   幂等：重复运行不会因为库/表已存在而失败。
+ *         REBUILD_FACTOR = true（默认）-> 先删因子表再重建，结果必定干净
+ *         REBUILD_FACTOR = false       -> 复用已有表，只补算还没算过的因子
  * ============================================================ */
 
 login("admin", "123456")
@@ -16,15 +20,22 @@ login("admin", "123456")
 DB_URI = "dfs://gtja"
 TB_MKT = "market"
 TB_FAC = "factor"
-
-// 先确认客户端本地模块已经注入到当前会话
-if (size(exec name from defs() where name = "gtjaCalAlpha1") == 0) {
-    throw "未找到 gtjaCalAlpha1：请用 `python run.py 2` 运行（run.py 会先注入 modules-local 里的公式）"
-}
+if (!defined("REBUILD_FACTOR")) REBUILD_FACTOR = true
 
 // 需要计算的因子编号（可改成 1..191 计算全部；21/30/116/147 官方未实现或需额外数据）
 factorList = 1..32
 skipList   = [21, 30, 116, 147]
+
+// ---------------- 0. 前置检查 ----------------
+if (size(exec name from defs() where name = "gtjaCalAlpha1") == 0) {
+    throw "未找到 gtjaCalAlpha1：请用 `python run.py 2` 运行（run.py 会先注入 modules-local 里的公式）"
+}
+if (!existsDatabase(DB_URI)) {
+    throw "数据库 " + DB_URI + " 不存在，请先运行: python run.py 1"
+}
+if (!existsTable(DB_URI, TB_MKT)) {
+    throw "表 " + DB_URI + "/" + TB_MKT + " 不存在，请先运行: python run.py 1"
+}
 
 // ---------------- 1. 准备数据与面板 ----------------
 market = loadTable(DB_URI, TB_MKT)
@@ -40,14 +51,26 @@ nRow = nDay * nSec
 
 print("data: " + string(nDay) + " days x " + string(nSec) + " securities")
 
-// ---------------- 2. 建因子表 ----------------
+// ---------------- 2. 确保因子表就绪（幂等） ----------------
 db = database(DB_URI)
-if (existsTable(DB_URI, TB_FAC)) {
+if (existsTable(DB_URI, TB_FAC) and REBUILD_FACTOR) {
     dropTable(db, TB_FAC)
+    print("已删除旧因子表 " + TB_FAC + "，将重建")
 }
+
 facSchema = table(1:0, `tradetime`securityid`alphaId`alphaValue,
                   [TIMESTAMP, SYMBOL, SYMBOL, DOUBLE])
-facPt = db.createPartitionedTable(facSchema, TB_FAC, `tradetime`securityid)
+if (existsTable(DB_URI, TB_FAC)) {
+    facPt = loadTable(DB_URI, TB_FAC)
+} else {
+    facPt = db.createPartitionedTable(facSchema, TB_FAC, `tradetime`securityid)
+}
+
+// 非重建模式下，记录已经算过的因子，避免重复追加
+existingIds = array(STRING)
+if (!REBUILD_FACTOR) {
+    existingIds = string(exec distinct alphaId from facPt)
+}
 
 // 矩阵（列优先 flatten）-> 长表
 def repN(x, n) { return take(x, n) }
@@ -63,11 +86,18 @@ def matToLong(m, days, sids, nDay, nRow, alphaId) {
 // ---------------- 3. 逐个计算 ----------------
 okList = array(INT)
 failList = array(INT)
+skipCnt = 0
 t0 = now()
 
 for (fid in factorList) {
     if (fid in skipList) { continue }
     alphaId = "ja" + string(fid)
+
+    if (!REBUILD_FACTOR and alphaId in existingIds) {
+        skipCnt = skipCnt + 1
+        continue
+    }
+
     try {
         callExpr = "gtjaCalAlpha" + string(fid) + "(data, startTime, endTime)"
         m = parseExpr(callExpr).eval()
@@ -82,6 +112,9 @@ for (fid in factorList) {
 // ---------------- 4. 校验 ----------------
 print("---- factor 表统计 ----")
 print("computed = " + string(size(okList)) + " factors")
+if (skipCnt > 0) {
+    print("skipped  = " + string(skipCnt) + " factors (已存在)")
+}
 if (size(failList) == 0) {
     print("failed   = none")
 } else {

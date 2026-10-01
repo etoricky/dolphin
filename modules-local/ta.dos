@@ -1,4 +1,9 @@
-module ta
+// ---- 客户端本地版本 (modules-local)：已移除 `module ta` 声明 ----
+// 由 gtja-lab/loader.py 注入到 DolphinDB 会话中执行。
+// 因拍平到全局命名空间后与内置函数重名，以下函数加了 ta 前缀：
+//   var/beta/sma/ema/wma/dema/tema/trima/kama/t3/ma
+//   -> taVar/taBeta/taSma/taEma/taWma/taDema/taTema/taTrima/taKama/taT3/taMa
+// 注意：函数体内 `::sma(...)` 这类调用仍指向「内置函数」，未作改动。
 
 /**
 module to support Python TA-Lib
@@ -7,7 +12,7 @@ DolphinDB server version: 1.30.23/2.00.11
 Last modification time: 2023.12.29
 */
 
-def module_info(){
+def taModuleInfo(){
     res = dict(STRING,ANY)
     res["moduleName"] = "ta"
     res["moduleVersion"] = "1.0.0"
@@ -16,10 +21,10 @@ def module_info(){
 }
 
 /**
- * var: Variance of Population
+ * taVar: Variance of Population
  */
 @state
-def var(close, timePeriod=5, nbdev=1){
+def taVar(close, timePeriod=5, nbdev=1){
 	return talib(mvarp, close, timePeriod)
 }
 
@@ -28,14 +33,14 @@ def var(close, timePeriod=5, nbdev=1){
  */
 @state
 def stddev(close, timePeriod=5, nbdev=1){
-	return sqrt(var(close, timePeriod, nbdev)) * nbdev
+	return sqrt(taVar(close, timePeriod, nbdev)) * nbdev
 }
 
 /**
- * beta: Beta
+ * taBeta: Beta
  */
 @state
-def beta(high, low, timePeriod=5){
+def taBeta(high, low, timePeriod=5){
 	return talib(mbeta, low.ratios() - 1, high.ratios() - 1, timePeriod)
 }
 
@@ -44,17 +49,17 @@ def beta(high, low, timePeriod=5){
  * http://www.tadoc.org/indicator/SMA.htm
  */
 @state
-def sma(close, timePeriod=30){
+def taSma(close, timePeriod=30){
 	return ::sma(close, timePeriod)
 }
 
 /**
- * ema: Exponential Moving Average
+ * taEma: Exponential Moving Average
  * http://www.tadoc.org/indicator/EMA.htm
  * https://www.fmlabs.com/reference/default.htm?url=ExpMA.htm
  */
 @state
-def ema(close, timePeriod=30) {
+def taEma(close, timePeriod=30) {
 	return ::ema(close, timePeriod)
 }
 
@@ -63,26 +68,26 @@ def ema(close, timePeriod=30) {
  * http://www.tadoc.org/indicator/WMA.htm
  */
 @state
-def wma(close, timePeriod=30){
+def taWma(close, timePeriod=30){
 	return ::wma(close, timePeriod)
 }
 
 /**
- * dema: Double Exponential Moving Average
+ * taDema: Double Exponential Moving Average
  * http://www.tadoc.org/indicator/DEMA.htm
  * https://www.fmlabs.com/reference/default.htm?url=DEMA.htm
  */
 @state
-def dema(close, timePeriod=30){
+def taDema(close, timePeriod=30){
 	return ::dema(close, timePeriod)
 }
 
 /**
- * tema: Triple Exponential Moving Average
+ * taTema: Triple Exponential Moving Average
  * http://www.tadoc.org/indicator/TEMA.htm
  */
 @state
-def tema(close, timePeriod=30){
+def taTema(close, timePeriod=30){
 	return ::tema(close, timePeriod)
 }
 
@@ -91,16 +96,16 @@ def tema(close, timePeriod=30){
  * http://www.tadoc.org/indicator/TRIMA.htm
  */
 @state
-def trima(close, timePeriod=30){
+def taTrima(close, timePeriod=30){
 	return ::trima(close, timePeriod)
 }
 
 /**
- * kama: Kaufman's Adaptative Moving Average
+ * taKama: Kaufman's Adaptative Moving Average
  * http://www.tadoc.org/indicator/KAMA.htm
  */
 @state
-def kama(close, timePeriod=30){
+def taKama(close, timePeriod=30){
 	return ::kama(close, timePeriod)
 }
 
@@ -113,12 +118,12 @@ def kama(close, timePeriod=30){
  * http://www.tadoc.org/indicator/T3.htm
  */
 @state
-def t3(close, timePeriod=5, vfactor=0){
+def taT3(close, timePeriod=5, vfactor=0){
 	return  ::t3(close, timePeriod, vfactor)
 }
 
 /**
- * ma: Moving average
+ * taMa: Moving average
  * 0: Simple Moving Average
  * 1: Exponential Moving Average
  * 2: Weighted Moving Average
@@ -130,7 +135,7 @@ def t3(close, timePeriod=5, vfactor=0){
  * 8: Triple Generalized Double Exponential Moving Average
  */
 @state
-def ma(close, timePeriod=30, maType=0){
+def taMa(close, timePeriod=30, maType=0){
  	return ::ma(close, timePeriod, maType)
 }
 
@@ -141,7 +146,7 @@ def ma(close, timePeriod=30, maType=0){
  */
 @state
 def bBands(close, timePeriod=5, nbdevUp=2, nbdevDn=2, maType=0){
-	mid = ma(close, timePeriod, maType)
+	mid = taMa(close, timePeriod, maType)
 	md = stddev(close, timePeriod, 1)
 	return (mid + nbdevUp * md, mid, mid - nbdevDn * md)
 }
@@ -170,7 +175,7 @@ def stochf(high, low, close, fastkPeriod=5, fastdPeriod=3, fastdMatype=0) {
 	high_, low_, close_ = talibNull(high, low, close)
 	lowestLow = talib(mmin, low_, fastkPeriod)
 	fastk = (close_ - lowestLow) \ (talib(mmax, high_, fastkPeriod) - lowestLow) * 100
-	fastd = ma(fastk, fastdPeriod, fastdMatype)
+	fastd = taMa(fastk, fastdPeriod, fastdMatype)
 	fastk_, fastd_ = talibNull(fastk, fastd)
 	return fastk_, fastd_
 }
@@ -185,10 +190,10 @@ def stoch(high, low, close, fastkPeriod=5, slowkPeriod=3, slowkMatype=0, slowdPe
 	high_, low_, close_ = talibNull(high, low, close)
 	lowestLow = talib(mmin, low_, fastkPeriod)
 	fastk = (close_ - lowestLow) \ (talib(mmax, high_, fastkPeriod) - lowestLow) * 100
-	fastd = ma(fastk, slowkPeriod, slowkMatype)
+	fastd = taMa(fastk, slowkPeriod, slowkMatype)
 	fastk_, slowk = talibNull(fastk, fastd)
 	
-	slowd = ma(slowk, slowdPeriod, slowdMatype)
+	slowd = taMa(slowk, slowdPeriod, slowdMatype)
 	res1, res2 = talibNull(slowk, slowd)
 	return res1, res2
 }
@@ -204,7 +209,7 @@ def stochRsi(real, timePeriod=14, fastkPeriod=5, fastdPeriod=3, fastdMatype=0) {
 	high_, low_, close_ = talibNull(rsidx, rsidx, rsidx)
 	lowestLow = talib(mmin, low_, fastkPeriod)
 	fastk = (close_ - lowestLow) \ (talib(mmax, high_, fastkPeriod) - lowestLow) * 100
-	fastd = ma(fastk, fastdPeriod, fastdMatype)
+	fastd = taMa(fastk, fastdPeriod, fastdMatype)
 	fastk_, fastd_ = talibNull(fastk, fastd)
 	return fastk_, fastd_
 }
@@ -215,7 +220,7 @@ def stochRsi(real, timePeriod=14, fastkPeriod=5, fastdPeriod=3, fastdMatype=0) {
  */
 @state
 def trix(close, timePeriod=30) {
-	return (ema(ema(ema(close, timePeriod), timePeriod), timePeriod).ratios()-1)*100
+	return (taEma(taEma(taEma(close, timePeriod), timePeriod), timePeriod).ratios()-1)*100
 }
 
 /**
@@ -422,17 +427,17 @@ def cmo(close, timePeriod=14){
 def macd(close, fastPeriod=12, slowPeriod=26, signalPeriod=9){
 	if (fastPeriod == 0 && slowPeriod == 0) {
 		closeFast, tmp = talibNull(close, talib(move, close, 14))
-		slowEma, fastEma = ema(close, 26), ema(closeFast, 12)
+		slowEma, fastEma = taEma(close, 26), taEma(closeFast, 12)
 		diff = fastEma - slowEma
-		dea = ema(diff, signalPeriod)
+		dea = taEma(diff, signalPeriod)
 		res1, res2, res3 = talibNull(diff, dea, diff - dea)
 	}else{
 		inSlowPeriod = max(fastPeriod, slowPeriod)
 		inFastPeriod = min(fastPeriod, slowPeriod)
 		closeFast, tmp = talibNull(close, talib(move, close, inSlowPeriod - inFastPeriod))
-		slowEma, fastEma = ema(close, inSlowPeriod), ema(closeFast, inFastPeriod)
+		slowEma, fastEma = taEma(close, inSlowPeriod), taEma(closeFast, inFastPeriod)
 		diff = fastEma - slowEma
-		dea = ema(diff, signalPeriod)
+		dea = taEma(diff, signalPeriod)
 		res1, res2, res3 = talibNull(diff, dea, diff - dea)
 	}
 	return res1, res2, res3
@@ -447,9 +452,9 @@ def macdExt(close, fastPeriod=12, fastMaType=0, slowPeriod=26, slowMaType=0, sig
 	inSlowPeriod = max(fastPeriod, slowPeriod)
 	inFastPeriod = min(fastPeriod, slowPeriod)
 	closeFast, tmp = talibNull(close, talib(move, close, inSlowPeriod - inFastPeriod))
-	slowEma, fastEma = ma(close, inSlowPeriod, slowMaType), ma(closeFast, inFastPeriod, fastMaType)
+	slowEma, fastEma = taMa(close, inSlowPeriod, slowMaType), taMa(closeFast, inFastPeriod, fastMaType)
 	diff = fastEma - slowEma
-	dea = ma(diff, signalPeriod, signalMaType)
+	dea = taMa(diff, signalPeriod, signalMaType)
 	res1, res2, res3 = talibNull(diff, dea, diff - dea)
 	return res1, res2, res3
 }
@@ -465,7 +470,7 @@ def macdFix(close, signalPeriod=9){
 	closeFast, tmp = talibNull(close, talib(move, close, 14))
 	slowEma, fastEma = gema(close, 26, 0.075), gema(closeFast, 12, 0.15)
 	diff = fastEma - slowEma
-	dea = ema(diff, signalPeriod)
+	dea = taEma(diff, signalPeriod)
 	res1, res2, res3 = talibNull(diff, dea, diff - dea)
 	return res1, res2, res3
 }
@@ -537,8 +542,8 @@ def rocr100(close, timePeriod=10){
  */
 @state
 def ppo(close, fastPeriod=12, slowPeriod=26, maType=0){
-	fast = ma(close, min(fastPeriod, slowPeriod), maType)
-	slow = ma(close, max(fastPeriod, slowPeriod), maType)
+	fast = taMa(close, min(fastPeriod, slowPeriod), maType)
+	slow = taMa(close, max(fastPeriod, slowPeriod), maType)
 	return (fast - slow) / slow * 100
 }
 
@@ -557,7 +562,7 @@ def mavp(close, periods, minPeriod=2, maxPeriod=30, maType=0){
 	rs = array(DOUBLE, n, n, NULL)
 	for(period in grp.keys()){
 		indexes = grp[period]
-		rs[indexes] = ma(close, period, maType)[indexes]
+		rs[indexes] = taMa(close, period, maType)[indexes]
 	}
 	return rs.fill!(:(b +maxPeriod - 1), NULL)
 }
@@ -568,7 +573,7 @@ def mavp(close, periods, minPeriod=2, maxPeriod=30, maType=0){
  */
 @state
 def apo(close, fastPeriod=12, slowPeriod=26, maType=0){
-	return ma(close, fastPeriod, maType) - ma(close, slowPeriod, maType)
+	return taMa(close, fastPeriod, maType) - taMa(close, slowPeriod, maType)
 }
 
 /**

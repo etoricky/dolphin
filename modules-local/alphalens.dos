@@ -1,6 +1,9 @@
-module alphalens
+/* ---- 客户端本地版本 (modules-local) ----
+ * 已移除 `module alphalens` 声明，由 gtja-lab/loader.py 注入到 DolphinDB 会话中执行。
+ * 因多个模块都定义了同名元数据函数，`module_info` 改名为 `alphalensModuleInfo`。
+ */
 
-def module_info(){
+def alphalensModuleInfo(){
     res = dict(STRING,ANY)
     res["moduleName"] = "alphalens"
     res["moduleVersion"] = "1.0.0"

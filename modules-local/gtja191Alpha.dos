@@ -7,11 +7,14 @@
 *  @ Last modification time: 2023.01.17
 *  @ DolphinDB server version: 2.00.9
 *  @ FileName: gtja191alpha.dos
+*
+*  ---- 客户端本地版本 (modules-local) ----
+*  已移除 module 声明与跨模块命名空间引用，改由 gtja-lab/loader.py 注入到
+*  DolphinDB 会话中执行。公式本体与官方版本一致。
+*  `module_info` 改名为 `gtja191AlphaModuleInfo`，避免与其他模块重名。
 */
 
-module gtja191Alpha
-
-def module_info(){
+def gtja191AlphaModuleInfo(){
     res = dict(STRING,ANY)
     res["moduleName"] = "gtja191Alpha"
     res["moduleVersion"] = "1.0.0"

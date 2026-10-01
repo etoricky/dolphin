@@ -1,4 +1,7 @@
-module mytt
+// ---- 客户端本地版本 (modules-local)：已移除 `module mytt` 声明 ----
+// 由 gtja-lab/loader.py 注入到 DolphinDB 会话中执行。
+// 因与内置函数重名，`BETWEEN` 改名为 `myttBetween`。
+// 注意：函数体内 `::abs(...)` / `::pow(...)` 这类调用仍指向「内置函数」，未作改动。
 
 /**
 DolphinDB实现通达信的指标计算
@@ -8,7 +11,7 @@ DolphinDB server version: 1.30.21 2023.02.15/2.00.9 2023.02.15
 Last modification time: 2023.04.23
 */
 
-def module_info(){
+def myttModuleInfo(){
     res = dict(STRING,ANY)
     res["moduleName"] = "mytt"
     res["moduleVersion"] = "1.0.0"
@@ -416,7 +419,7 @@ def VALUEWHEN(S, X) {
  * :return S_: 序列，BOOL型，S介于A和B之间为True否则为False。
 */
 @state
-def BETWEEN(S, A, B) {
+def myttBetween(S, A, B) {
 	return ((A < S) and (S < B)) or ((A > S) and (S > B))
 }
 

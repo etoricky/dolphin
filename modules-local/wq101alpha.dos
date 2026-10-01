@@ -7,11 +7,13 @@
 *  @ Last modification time: 2022.04.18
 *  @ DolphinDB server version: 2.00.9
 *  @ FileName: wq101alpha.dos
+*
+*  ---- 客户端本地版本 (modules-local) ----
+*  已移除 module 声明，由 gtja-lab/loader.py 注入到 DolphinDB 会话中执行。
+*  因多个模块都定义了同名元数据函数，`module_info` 改名为 `wq101alphaModuleInfo`。
 */
 
-module wq101alpha
-
-def module_info(){
+def wq101alphaModuleInfo(){
     res = dict(STRING,ANY)
     res["moduleName"] = "wq101alpha"
     res["moduleVersion"] = "1.0.0"

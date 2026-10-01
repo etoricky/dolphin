@@ -4,49 +4,74 @@
  *     - 表    ：market (tradetime, securityid, open, close, high, low,
  *                        vol, vwap, index_open, index_close)
  *     - 分区  ：按「月」VALUE 分区 + 按 securityid HASH 20 分区
- *   既可在 VS Code 的 DolphinDB 插件里直接运行，也可用 run.py 运行。
+ *
+ *   幂等：重复运行不会因为库/表已存在而失败。
+ *         RECREATE = false（默认）-> 已存在就跳过导入，秒回
+ *         RECREATE = true         -> 先删库重建，重新导入 CSV
+ *         （注意：删库会连带删掉库里的 factor 表）
  * ============================================================ */
 
 // ---------------- 配置 ----------------
 CSV_PATH = "C:/d/hub/dolphin/modules-local/datatest.csv"
 DB_URI   = "dfs://gtja"
 TB_NAME  = "market"
+if (!defined("RECREATE")) RECREATE = false
 
 login("admin", "123456")
 
-// ---------------- 1. 读取原始数据 ----------------
-raw = loadText(CSV_PATH)
-
-// 统一字段名与类型（tradetime 由 loadText 自动识别为 TIMESTAMP）
-t = select
-        tradetime,
-        symbol(securityid)   as securityid,
-        double(open)         as open,
-        double(close)        as close,
-        double(high)         as high,
-        double(low)          as low,
-        double(vol)          as vol,
-        double(vwap)         as vwap,
-        double(index_open)   as index_open,
-        double(index_close)  as index_close
-    from raw
-
-// ---------------- 2. 创建数据库 ----------------
-if (existsDatabase(DB_URI)) {
+if (existsDatabase(DB_URI) and RECREATE) {
     dropDatabase(DB_URI)
+    print("已删除旧库: " + DB_URI)
 }
 
-mnM = month(min(t.tradetime))
-mxM = month(max(t.tradetime))
-months = mnM + 0..int(mxM - mnM)          // 例如 2010.01M ~ 2010.12M
+dbReady = existsDatabase(DB_URI)
+tblReady = false
+if (dbReady) {
+    tblReady = existsTable(DB_URI, TB_NAME)
+}
 
-dbDate = database("", VALUE, months)
-dbSec  = database("", HASH, [SYMBOL, 20])
-db     = database(DB_URI, COMPO, [dbDate, dbSec], engine="OLAP")
+if (tblReady) {
+    print("表 " + TB_NAME + " 已存在，跳过导入（如需重建请把 RECREATE 改为 true）")
+} else {
+    // ---------------- 1. 读取原始数据 ----------------
+    raw = loadText(CSV_PATH)
 
-// ---------------- 3. 建表并写入 ----------------
-pt = db.createPartitionedTable(t, TB_NAME, `tradetime`securityid)
-pt.append!(t)
+    // 统一字段名与类型（tradetime 由 loadText 自动识别为 TIMESTAMP）
+    t = select
+            tradetime,
+            symbol(securityid)   as securityid,
+            double(open)         as open,
+            double(close)        as close,
+            double(high)         as high,
+            double(low)          as low,
+            double(vol)          as vol,
+            double(vwap)         as vwap,
+            double(index_open)   as index_open,
+            double(index_close)  as index_close
+        from raw
+
+    // ---------------- 2. 数据库：有就取句柄，没有才按分区方案创建 ----------------
+    if (dbReady) {
+        db = database(DB_URI)
+    } else {
+        mnM = month(min(t.tradetime))
+        mxM = month(max(t.tradetime))
+        months = mnM + 0..int(mxM - mnM)          // 例如 2010.01M ~ 2010.12M
+
+        dbDate = database("", VALUE, months)
+        dbSec  = database("", HASH, [SYMBOL, 20])
+        db     = database(DB_URI, COMPO, [dbDate, dbSec], engine="OLAP")
+    }
+
+    // ---------------- 3. 建表并写入（表已存在则复用，不报错） ----------------
+    if (existsTable(DB_URI, TB_NAME)) {
+        pt = loadTable(DB_URI, TB_NAME)
+    } else {
+        pt = db.createPartitionedTable(t, TB_NAME, `tradetime`securityid)
+    }
+    pt.append!(t)
+    print("已导入 " + string(size(t)) + " 行到 " + DB_URI + "/" + TB_NAME)
+}
 
 // ---------------- 4. 校验 ----------------
 print("---- market 表统计 ----")
@@ -54,5 +79,4 @@ select count(*) as rows, min(tradetime) as startTime, max(tradetime) as endTime
 from loadTable(DB_URI, TB_NAME)
 print("securities = " + string(size(exec distinct securityid from loadTable(DB_URI, TB_NAME))))
 print("tradingDays = " + string(size(exec distinct tradetime from loadTable(DB_URI, TB_NAME))))
-
 print("01_create_market_db.dos done.")
