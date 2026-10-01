@@ -6,6 +6,9 @@
  *         例如 gtjaCalAlpha1 / gtjaAlpha1。
  *         请通过 run.py 运行：python run.py 2  （会自动先注入本地模块）
  *
+ *   列名：market 表用 lab 自定义列名（Timestamp/Symbol/MidOpen/...），
+ *         本脚本用官方 prepareData 适配成 GTJA191 标准字段后再计算，模块本身不改动。
+ *
  *   输出长表：tradetime, securityid, alphaId, alphaValue
  *   因子矩阵行序 = 交易日升序，列序 = 证券代码升序（panel 会排序）
  *
@@ -38,12 +41,21 @@ if (!existsTable(DB_URI, TB_MKT)) {
 }
 
 // ---------------- 1. 准备数据与面板 ----------------
-market = loadTable(DB_URI, TB_MKT)
-data   = select * from market order by tradetime, securityid
+// market 表用的是 lab 自定义列名；这里用官方 prepareData 适配回 GTJA191 标准字段，
+// 之后 data 就是标准字段名（securityid/tradetime/open/close/high/low/vol/vwap/index_*）
+market    = loadTable(DB_URI, TB_MKT)
+startTime = exec min(Timestamp) from market
+endTime   = exec max(Timestamp) from market
 
-startTime = min(data.tradetime)
-endTime   = max(data.tradetime)
-days = sort(exec distinct tradetime from data)    // 矩阵行标签
+rawData = select * from market
+data = prepareData(rawData = rawData, startTime = startTime, endTime = endTime,
+                   securityidName = "Symbol",     tradetimeName  = "Timestamp",
+                   openName       = "MidOpen",    closeName      = "MidClose",
+                   highName       = "MidHigh",    lowName        = "MidLow",
+                   volumeName     = "BarVolume",  vwapName       = "BarVwap",
+                   indexCloseName = "IndexClose", indexOpenName  = "IndexOpen")
+
+days = sort(exec distinct tradetime from data)    // 矩阵行标签（data 已是标准字段名）
 sids = sort(exec distinct securityid from data)   // 矩阵列标签
 nDay = size(days)
 nSec = size(sids)

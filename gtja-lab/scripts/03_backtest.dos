@@ -25,7 +25,9 @@ TB_FAC   = "factor"
 OUT_DIR  = "C:/d/hub/dolphin/gtja-lab/output"
 
 // ---------------- 基础数据（只需算一次） ----------------
-mkt    = select securityid, tradetime, close from loadTable(DB_URI, TB_MKT) order by securityid, tradetime
+// market 表是 lab 自定义列名，这里映射成回测内部使用的短名
+mkt    = select Symbol as securityid, Timestamp as tradetime, MidClose as close
+         from loadTable(DB_URI, TB_MKT) order by Symbol, Timestamp
 rawRet = select securityid, tradetime, move(close, -1) \ close - 1 as fwdRet
          from mkt context by securityid
 retTb  = select securityid, tradetime,

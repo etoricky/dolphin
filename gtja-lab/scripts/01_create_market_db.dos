@@ -1,14 +1,17 @@
 /* ============================================================
  * 01 创建分布式数据库并导入市场日频行情
  *     - 数据库：dfs://gtja
- *     - 表    ：market (tradetime, securityid, open, close, high, low,
- *                        vol, vwap, index_open, index_close)
- *     - 分区  ：按「月」VALUE 分区 + 按 securityid HASH 20 分区
+ *     - 表    ：market，使用 lab 自定义列名：
+ *         Timestamp, Symbol, MidOpen, MidClose, MidHigh, MidLow,
+ *         BarVolume, BarVwap, IndexOpen, IndexClose
+ *       （GTJA191 要求的标准字段名由 02 里的 prepareData 适配，模块本身不改动）
+ *     - 分区  ：按「月」VALUE 分区 + 按 Symbol HASH 20 分区
  *
  *   幂等：重复运行不会因为库/表已存在而失败。
  *         RECREATE = false（默认）-> 已存在就跳过导入，秒回
  *         RECREATE = true         -> 先删库重建，重新导入 CSV
  *         （注意：删库会连带删掉库里的 factor 表）
+ *         改动过列名 / 分区方案后，必须 RECREATE=true 重建。
  * ============================================================ */
 
 // ---------------- 配置 ----------------
@@ -33,29 +36,28 @@ if (dbReady) {
 if (tblReady) {
     print("表 " + TB_NAME + " 已存在，跳过导入（如需重建请把 RECREATE 改为 true）")
 } else {
-    // ---------------- 1. 读取原始数据 ----------------
+    // ---------------- 1. 读取原始数据并改名 ----------------
     raw = loadText(CSV_PATH)
 
-    // 统一字段名与类型（tradetime 由 loadText 自动识别为 TIMESTAMP）
     t = select
-            tradetime,
-            symbol(securityid)   as securityid,
-            double(open)         as open,
-            double(close)        as close,
-            double(high)         as high,
-            double(low)          as low,
-            double(vol)          as vol,
-            double(vwap)         as vwap,
-            double(index_open)   as index_open,
-            double(index_close)  as index_close
+            tradetime            as Timestamp,
+            symbol(securityid)   as Symbol,
+            double(open)         as MidOpen,
+            double(close)        as MidClose,
+            double(high)         as MidHigh,
+            double(low)          as MidLow,
+            double(vol)          as BarVolume,
+            double(vwap)         as BarVwap,
+            double(index_open)   as IndexOpen,
+            double(index_close)  as IndexClose
         from raw
 
     // ---------------- 2. 数据库：有就取句柄，没有才按分区方案创建 ----------------
     if (dbReady) {
         db = database(DB_URI)
     } else {
-        mnM = month(min(t.tradetime))
-        mxM = month(max(t.tradetime))
+        mnM = month(min(t.Timestamp))
+        mxM = month(max(t.Timestamp))
         months = mnM + 0..int(mxM - mnM)          // 例如 2010.01M ~ 2010.12M
 
         dbDate = database("", VALUE, months)
@@ -67,7 +69,7 @@ if (tblReady) {
     if (existsTable(DB_URI, TB_NAME)) {
         pt = loadTable(DB_URI, TB_NAME)
     } else {
-        pt = db.createPartitionedTable(t, TB_NAME, `tradetime`securityid)
+        pt = db.createPartitionedTable(t, TB_NAME, `Timestamp`Symbol)
     }
     pt.append!(t)
     print("已导入 " + string(size(t)) + " 行到 " + DB_URI + "/" + TB_NAME)
@@ -75,8 +77,8 @@ if (tblReady) {
 
 // ---------------- 4. 校验 ----------------
 print("---- market 表统计 ----")
-select count(*) as rows, min(tradetime) as startTime, max(tradetime) as endTime
+select count(*) as rows, min(Timestamp) as startTime, max(Timestamp) as endTime
 from loadTable(DB_URI, TB_NAME)
-print("securities = " + string(size(exec distinct securityid from loadTable(DB_URI, TB_NAME))))
-print("tradingDays = " + string(size(exec distinct tradetime from loadTable(DB_URI, TB_NAME))))
+print("securities = " + string(size(exec distinct Symbol from loadTable(DB_URI, TB_NAME))))
+print("tradingDays = " + string(size(exec distinct Timestamp from loadTable(DB_URI, TB_NAME))))
 print("01_create_market_db.dos done.")
