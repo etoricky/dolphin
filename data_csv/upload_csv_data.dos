@@ -1,0 +1,90 @@
+/* ============================================================
+ * 01 Create the distributed database and import daily market data
+ *     - Database: dfs://gtja
+ *     - Table   : market, using lab's custom column names:
+ *         Timestamp, Symbol, MidOpen, MidClose, MidHigh, MidLow,
+ *         BarVolume, BarVwap, IndexOpen, IndexClose
+ *       (the standard field names required by GTJA191 are adapted by prepareData in 02; the module itself is unchanged)
+ *     - Partition: VALUE partition by "month" + HASH 20 partition by Symbol
+ *
+ *   Idempotent: repeated runs will not fail because the DB/table already exists.
+ *         RECREATE = false (default) -> skip the import if it already exists, returns instantly
+ *         RECREATE = true            -> drop the DB and recreate it first, then re-import the CSV
+ *         (note: dropping the DB also drops the factor table inside it)
+ *         After changing the column names / partition scheme, you must recreate with RECREATE=true.
+ * ============================================================ */
+
+// ---------------- Config ----------------
+// The input is the session variable uploaded by upload_csv_data, injected as FROM_VAR by upload_csv_data.py.
+// To run this script standalone in the VS Code plugin, first define FROM_VAR yourself to point to an already-loaded variable.
+if (!defined("DB_URI"))  DB_URI  = "dfs://gtja"
+if (!defined("TB_NAME")) TB_NAME = "market"
+if (!defined("RECREATE")) RECREATE = false
+if (!defined("FROM_VAR")) throw "FROM_VAR is not defined: this script should be called by the upload_csv_data step (upload_csv_data.py injects it)"
+if (!defined(FROM_VAR)) throw "session variable " + FROM_VAR + " does not exist: please run the upload_csv_data step first to upload it"
+
+// Login (uses the defaults below when not injected; upload_csv_data.py injects DB_USER/DB_PASSWORD from the same-named constants in this file)
+if (!defined("DB_USER"))     DB_USER     = "admin"
+if (!defined("DB_PASSWORD")) DB_PASSWORD = "123456"
+login(DB_USER, DB_PASSWORD)
+
+if (existsDatabase(DB_URI) and RECREATE) {
+    dropDatabase(DB_URI)
+    print("dropped old database: " + DB_URI)
+}
+
+dbReady = existsDatabase(DB_URI)
+tblReady = false
+if (dbReady) {
+    tblReady = existsTable(DB_URI, TB_NAME)
+}
+
+if (tblReady) {
+    print("table " + TB_NAME + " already exists, skipping import (set RECREATE to true to recreate)")
+} else {
+    // ---------------- 1. Fetch the input table by name and rename it ----------------
+    // The input variable name comes from FROM_VAR (injected by upload_csv_data.py).
+    src = objByName(FROM_VAR)
+    t = select
+            timestamp(tradetime) as Timestamp,
+            symbol(securityid)   as Symbol,
+            double(open)         as MidOpen,
+            double(close)        as MidClose,
+            double(high)         as MidHigh,
+            double(low)          as MidLow,
+            double(vol)          as BarVolume,
+            double(vwap)         as BarVwap,
+            double(index_open)   as IndexOpen,
+            double(index_close)  as IndexClose
+        from src
+
+    // ---------------- 2. Database: get the handle if it exists, otherwise create it with the partition scheme ----------------
+    if (dbReady) {
+        db = database(DB_URI)
+    } else {
+        mnM = month(min(t.Timestamp))
+        mxM = month(max(t.Timestamp))
+        months = mnM + 0..int(mxM - mnM)          // e.g. 2010.01M ~ 2010.12M
+
+        dbDate = database("", VALUE, months)
+        dbSec  = database("", HASH, [SYMBOL, 20])
+        db     = database(DB_URI, COMPO, [dbDate, dbSec], engine="OLAP")
+    }
+
+    // ---------------- 3. Create the table and write (reuse it if it already exists, no error) ----------------
+    if (existsTable(DB_URI, TB_NAME)) {
+        pt = loadTable(DB_URI, TB_NAME)
+    } else {
+        pt = db.createPartitionedTable(t, TB_NAME, `Timestamp`Symbol)
+    }
+    pt.append!(t)
+    print("imported " + string(size(t)) + " rows into " + DB_URI + "/" + TB_NAME)
+}
+
+// ---------------- 4. Validation ----------------
+print("---- market table stats ----")
+select count(*) as rows, min(Timestamp) as startTime, max(Timestamp) as endTime
+from loadTable(DB_URI, TB_NAME)
+print("securities = " + string(size(exec distinct Symbol from loadTable(DB_URI, TB_NAME))))
+print("tradingDays = " + string(size(exec distinct Timestamp from loadTable(DB_URI, TB_NAME))))
+print("upload_csv_data.dos done.")

@@ -1,0 +1,6 @@
+{
+    "dos_modules": [
+        "calc_gtja/gtja191Alpha.dos",
+        "calc_gtja/gtja191Prepare.dos"
+    ]
+}

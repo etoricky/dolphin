@@ -1,0 +1,5 @@
+{"action": "upload_csv_data", "params": {"py": "data_csv/upload_csv_data.py", "csv": "data_csv/data_full.csv", "recreate": true}}
+{"action": "calc_gtja", "params": {"dos": "calc_gtja/calc.dos", "rebuild_alpha": true}}
+{"action": "calc_wq", "params": {"dos": "calc_wq/calc.dos", "rebuild_alpha": true}}
+{"action": "backtest01", "params": {"dos": "backtest01/backtest.dos", "alpha_id": "ja2", "groups": 5}}
+{"action": "plot", "params": {"py": "backtest01/plot.py", "alpha_id": "ja2", "out_dir": "backtest01/output"}}

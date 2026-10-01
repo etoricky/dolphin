@@ -1,0 +1,107 @@
+/* ============================================================
+ * 03 GTJA191 alpha cross-sectional quantile backtest
+ *     - Read any alpha from dfs://gtja/alpha + market close price
+ *     - Each day, split the whole market into G groups by alpha value (0=smallest, G-1=largest)
+ *     - Compute each group's equal-weighted daily return, cumulative nav, annualized return/volatility/sharpe, max drawdown
+ *     - Additionally output the "long-short portfolio" (largest group - smallest group)
+ *     - Results written to CSV in the output/ directory, for easy plotting
+ *   Change the ALPHA_ID variable to backtest a different alpha.
+ *
+ *   Note: data_full.csv is DolphinDB's official synthetic data for "validating alpha calculation",
+ *   the prices are random numbers with no real market continuity, so the performance numbers here only serve to prove
+ *   that the backtest pipeline runs through; they do not represent any real strategy performance.
+ * ============================================================ */
+
+// ---------------- Login (use defaults below when not injected; run.py injects DB_USER/DB_PASSWORD from config) ----------------
+if (!defined("DB_USER"))     DB_USER     = "admin"
+if (!defined("DB_PASSWORD")) DB_PASSWORD = "123456"
+login(DB_USER, DB_PASSWORD)
+
+// ---------------- Config (can be overridden by run.py args; use defaults below when not passed) ----------------
+if (!defined("G"))        G        = 5
+if (!defined("RET_CLIP")) RET_CLIP = 0.2
+if (!defined("ALPHA_ID")) ALPHA_ID = "ja1"      // change here to switch alpha, e.g. "ja5"
+
+if (!defined("DB_URI"))        DB_URI        = "dfs://gtja"
+if (!defined("TB_MKT"))        TB_MKT        = "market"
+if (!defined("TB_ALPHA"))      TB_ALPHA      = "alpha"
+
+// ---------------- Base data (compute once) ----------------
+// The market table uses lab custom column names; map them to short names used internally by the backtest
+mkt    = select Symbol as securityid, Timestamp as tradetime, MidClose as close
+         from loadTable(DB_URI, TB_MKT) order by Symbol, Timestamp
+rawRet = select securityid, tradetime, move(close, -1) \ close - 1 as fwdRet
+         from mkt context by securityid
+retTb  = select securityid, tradetime,
+                iif(fwdRet >  RET_CLIP,  RET_CLIP,
+                iif(fwdRet < -RET_CLIP, -RET_CLIP, fwdRet)) as fwdRet
+         from rawRet
+
+// ---------------- Backtest functions ----------------
+def backtestAlpha(DB_URI, TB_ALPHA, retTb, alphaKey, G) {
+    alphaTb = select tradetime, securityid, alphaValue as sig
+              from loadTable(DB_URI, TB_ALPHA) where alphaId = alphaKey
+
+    // Align alpha value on day t with the t -> t+1 return
+    j = select f.tradetime as tradetime, f.securityid as securityid, f.sig as sig, r.fwdRet as fwdRet
+        from alphaTb f inner join retTb r on f.tradetime = r.tradetime and f.securityid = r.securityid
+
+    // Each day, split cross-sectionally into G groups by alpha value
+    j2 = select tradetime, securityid, sig, fwdRet,
+            iif(int(rank(sig, percent=true) * G) >= G, G-1, int(rank(sig, percent=true) * G)) as bucket
+         from j context by tradetime
+
+    // Drop samples where alpha is null / return is null
+    j3 = select * from j2 where !isNull(bucket) and !isNull(fwdRet)
+
+    // Equal-weighted daily return of each group
+    daily = select avg(fwdRet) as ret, count(fwdRet) as nStock from j3 group by tradetime, bucket
+
+    // Nav curve
+    navTb = select tradetime, bucket, ret, cumprod(1 + ret) as nav from daily context by bucket
+
+    // Performance metrics
+    stats = select
+                count(*) as days,
+                prod(1 + ret) - 1                            as cumRet,
+                pow(prod(1 + ret), 252.0 \ count(*)) - 1     as annRet,
+                std(ret) * sqrt(252.0)                       as annVol,
+                (pow(prod(1 + ret), 252.0 \ count(*)) - 1) \
+                    (std(ret) * sqrt(252.0))                 as sharpe
+            from daily group by bucket
+
+    // Max drawdown
+    dd = select bucket, max(1 - nav \ cummax(nav)) as maxDD from navTb group by bucket
+
+    // Long-short portfolio: largest group - smallest group
+    wide  = exec ret from daily pivot by tradetime, bucket
+    lsRet = nullFill(wide[, G-1] - wide[, 0], 0.0)
+    ls = table(
+            count(lsRet)                                    as days,
+            prod(1 + lsRet) - 1                             as cumRet,
+            pow(prod(1 + lsRet), 252.0 \ count(lsRet)) - 1  as annRet,
+            std(lsRet) * sqrt(252.0)                        as annVol,
+            (pow(prod(1 + lsRet), 252.0 \ count(lsRet)) - 1) \
+                (std(lsRet) * sqrt(252.0))                  as sharpe
+         )
+
+    return dict(`daily`nav`stats`drawdown`ls, [daily, navTb, stats, dd, ls])
+}
+
+// ---------------- Execute ----------------
+res = backtestAlpha(DB_URI, TB_ALPHA, retTb, ALPHA_ID, G)
+
+print("---- quantile performance metrics alpha=" + ALPHA_ID + "  (bucket 0=smallest, " + string(G-1) + "=largest) ----")
+res.stats
+print("---- Max drawdown ----")
+res.drawdown
+print("---- Long-short portfolio (top - bottom) ----")
+res.ls
+
+// ---------------- Save ----------------
+saveText(res.daily, OUT_DIR + "/bt_" + ALPHA_ID + "_daily.csv")
+saveText(res.nav,   OUT_DIR + "/bt_" + ALPHA_ID + "_nav.csv")
+print("saved to " + OUT_DIR)
+
+// Return stats table (run.py will print)
+res.stats

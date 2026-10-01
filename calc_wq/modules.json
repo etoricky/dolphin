@@ -1,0 +1,6 @@
+{
+    "dos_modules": [
+        "calc_wq/wq101alpha.dos",
+        "calc_wq/prepare101.dos"
+    ]
+}

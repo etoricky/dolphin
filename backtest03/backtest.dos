@@ -1,0 +1,106 @@
+/* ============================================================
+ * backtest03: Evaluate an alpha on the fly via a DolphinDB expression (RankIC / ICIR)
+ *     - Does not depend on the alpha table: evaluate an "expression" directly on the market panel to get an alpha matrix
+ *     - Daily cross-sectional rank correlation -> RankIC; summarize Mean Rank IC / IC Volatility / ICIR / days
+ *     - Use panel variable names in the expression: close / open / high / low / vol / vwap
+ *   Example: -1 * ts_corr(ts_rank(log(vol), 6), ts_rank((close - open) / (high - low), 6), 6)
+ *
+ *   Notes:
+ *     1) DolphinDB has no built-in ts_*; here we provide ts_corr / ts_rank aliases (mapped to mcorr / mrank),
+ *        making it convenient to paste WorldQuant-style expressions directly.
+ *     2) parseExpr can only be evaluated at the script top level (inside a function it reports "SQL context is not initialized"),
+ *        so "expression evaluation" is done at the top level, then the alpha matrix is passed to evaluate_alpha() to compute metrics.
+ * ============================================================ */
+
+// ---------------- Login (use defaults when not injected; run.py injects DB_USER/DB_PASSWORD from config) ----------------
+if (!defined("DB_USER"))     DB_USER     = "admin"
+if (!defined("DB_PASSWORD")) DB_PASSWORD = "123456"
+login(DB_USER, DB_PASSWORD)
+
+// ---------------- Config (can be overridden by run.py args) ----------------
+if (!defined("EXPRESSION")) EXPRESSION = "-1 * ts_corr(ts_rank(log(vol), 6), ts_rank((close - open) / (high - low), 6), 6)"
+if (!defined("RET_CLIP"))   RET_CLIP   = 0.2
+if (!defined("DB_URI"))     DB_URI     = "dfs://gtja"
+if (!defined("TB_MKT"))     TB_MKT     = "market"
+
+// ---------------- WorldQuant-style aliases -> DolphinDB built-ins ----------------
+def ts_corr(a, b, n) { return mcorr(a, b, n) }
+def ts_rank(x, n)    { return mrank(x, true, n) }
+
+// ---------------- Base data: next-day return (same convention as backtest01/02) ----------------
+mkt    = select Symbol as securityid, Timestamp as tradetime, MidClose as close
+         from loadTable(DB_URI, TB_MKT) order by Symbol, Timestamp
+rawRet = select securityid, tradetime, move(close, -1) \ close - 1 as fwdRet
+         from mkt context by securityid
+retTb  = select securityid, tradetime,
+                iif(fwdRet >  RET_CLIP,  RET_CLIP,
+                iif(fwdRet < -RET_CLIP, -RET_CLIP, fwdRet)) as fwdRet
+         from rawRet
+
+// ---------------- Panel (rows = trading days ascending, columns = security codes ascending) ----------------
+data  = select Symbol as securityid, Timestamp as tradetime,
+               MidOpen as open, MidClose as close, MidHigh as high, MidLow as low,
+               BarVolume as vol, BarVwap as vwap
+        from loadTable(DB_URI, TB_MKT)
+days  = sort(exec distinct tradetime from data)
+sids  = sort(exec distinct securityid from data)
+nDay  = size(days)
+nSec  = size(sids)
+nRow  = nDay * nSec
+print("panel: " + string(nDay) + " days x " + string(nSec) + " securities")
+
+open  = exec open  from data pivot by tradetime, securityid
+close = exec close from data pivot by tradetime, securityid
+high  = exec high  from data pivot by tradetime, securityid
+low   = exec low   from data pivot by tradetime, securityid
+vol   = exec vol   from data pivot by tradetime, securityid
+vwap  = exec vwap  from data pivot by tradetime, securityid
+
+// ---------------- Metric functions: alpha matrix -> RankIC / ICIR ----------------
+def repN(x, n) { return take(x, n) }
+
+def matToLong(m, days, sids, nDay, nRow, alphaId) {
+    return table(
+        take(days, nRow)                     as tradetime,
+        flatten(each(repN, sids, nDay))      as securityid,
+        take(alphaId, nRow)                  as alphaId,
+        m.flatten()                          as alphaValue
+    )
+}
+
+def evaluate_alpha(m, retTb, days, sids, nDay, nRow) {
+    alphaTb = matToLong(m, days, sids, nDay, nRow, "expr")
+
+    // Align alpha value on day t with the t -> t+1 return
+    j = select f.tradetime as tradetime, f.securityid as securityid,
+               f.alphaValue as sig, r.fwdRet as fwdRet
+        from alphaTb f inner join retTb r on f.tradetime = r.tradetime and f.securityid = r.securityid
+    j = select * from j where !isNull(sig) and !isNull(fwdRet)
+
+    // Daily cross-sectional rank correlation -> RankIC
+    jr = select tradetime, sig, fwdRet, rank(sig) as rSig, rank(fwdRet) as rRet
+         from j context by tradetime
+    icTb = select corr(rSig, rRet) as rankIC from jr group by tradetime
+    icTb = select * from icTb where !isNull(rankIC)
+
+    meanIC = exec avg(rankIC) from icTb
+    volIC  = exec std(rankIC) from icTb
+    nDays  = exec count(*) from icTb
+
+    return dict(["Mean Rank IC", "IC Volatility", "ICIR (Information Ratio)", "Total Trading Days"],
+                [meanIC, volIC, meanIC \ volIC, nDays])
+}
+
+// ---------------- Evaluate + assess ----------------
+metrics = evaluate_alpha(parseExpr(EXPRESSION).eval(), retTb, days, sids, nDay, nRow)
+
+print("---- evaluate_alpha result ----")
+metrics
+
+// ---- Manually build JSON to lock the order: {"expression":...,"metrics":{"Mean Rank IC":...,"IC Volatility":...,"ICIR (Information Ratio)":...,"Total Trading Days":...}} ----
+js = '{"expression":' + toStdJson(EXPRESSION) + ',"metrics":{"Mean Rank IC":' + string(metrics["Mean Rank IC"]) + ',"IC Volatility":' + string(metrics["IC Volatility"]) + ',"ICIR (Information Ratio)":' + string(metrics["ICIR (Information Ratio)"]) + ',"Total Trading Days":' + string(metrics["Total Trading Days"]) + '}}'
+saveText([js], OUT_DIR + "/eval_result.json")
+print("saved to " + OUT_DIR + "/eval_result.json")
+
+// Return metrics (run.py will print)
+metrics

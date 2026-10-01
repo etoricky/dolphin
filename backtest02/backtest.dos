@@ -1,0 +1,81 @@
+/* ============================================================
+ * backtest02: IC / RankIC / ICIR backtest (second backtest method)
+ *     - Read any alpha from dfs://gtja/alpha + market close price
+ *     - Daily cross-sectional corr(alpha, next-day return) -> IC; rank the cross-section then corr -> RankIC
+ *     - Summarize IC / RankIC mean, std dev, ICIR, t-stat, win rate, days
+ *     - Daily IC series and summary written to CSV in OUT_DIR
+ *   Change the ALPHA_ID variable to backtest a different alpha.
+ *
+ *   Consistent with backtest01 (quantile nav): both use next-day return move(close,-1)/close-1 and apply RET_CLIP winsorization.
+ * ============================================================ */
+
+// ---------------- Login (use defaults when not injected; run.py injects DB_USER/DB_PASSWORD from config) ----------------
+if (!defined("DB_USER"))     DB_USER     = "admin"
+if (!defined("DB_PASSWORD")) DB_PASSWORD = "123456"
+login(DB_USER, DB_PASSWORD)
+
+// ---------------- Config (can be overridden by run.py args) ----------------
+if (!defined("RET_CLIP")) RET_CLIP = 0.2
+if (!defined("ALPHA_ID")) ALPHA_ID = "ja1"
+
+if (!defined("DB_URI"))   DB_URI   = "dfs://gtja"
+if (!defined("TB_MKT"))   TB_MKT   = "market"
+if (!defined("TB_ALPHA")) TB_ALPHA = "alpha"
+
+// ---------------- Base data: next-day return (same convention as backtest01) ----------------
+mkt    = select Symbol as securityid, Timestamp as tradetime, MidClose as close
+         from loadTable(DB_URI, TB_MKT) order by Symbol, Timestamp
+rawRet = select securityid, tradetime, move(close, -1) \ close - 1 as fwdRet
+         from mkt context by securityid
+retTb  = select securityid, tradetime,
+                iif(fwdRet >  RET_CLIP,  RET_CLIP,
+                iif(fwdRet < -RET_CLIP, -RET_CLIP, fwdRet)) as fwdRet
+         from rawRet
+
+// ---------------- Daily IC / RankIC ----------------
+def icSeries(DB_URI, TB_ALPHA, retTb, alphaKey) {
+    alphaTb = select tradetime, securityid, alphaValue as sig
+              from loadTable(DB_URI, TB_ALPHA) where alphaId = alphaKey
+
+    // Align alpha value on day t with the t -> t+1 return
+    j = select f.tradetime as tradetime, f.securityid as securityid, f.sig as sig, r.fwdRet as fwdRet
+        from alphaTb f inner join retTb r on f.tradetime = r.tradetime and f.securityid = r.securityid
+    j = select * from j where !isNull(sig) and !isNull(fwdRet)
+
+    // Daily cross-sectional rank (RankIC = Pearson after cross-sectional rank)
+    jr = select tradetime, sig, fwdRet, rank(sig) as rSig, rank(fwdRet) as rRet
+         from j context by tradetime
+
+    icTb = select corr(sig, fwdRet) as ic, corr(rSig, rRet) as rankIC
+           from jr group by tradetime
+
+    return select * from icTb where !isNull(ic) and !isNull(rankIC)
+}
+
+icTb = icSeries(DB_URI, TB_ALPHA, retTb, ALPHA_ID)
+
+// ---------------- Summary (ICIR = mean(IC) / std(IC); t-stat = ICIR * sqrt(days)) ----------------
+summary = select
+            count(*)                                        as days,
+            avg(ic)                                         as icMean,
+            std(ic)                                         as icStd,
+            avg(ic) \ std(ic)                               as icir,
+            (avg(ic) \ std(ic)) * sqrt(count(*))            as icTStat,
+            avg(iif(ic > 0, 1.0, 0.0))                      as icWinRate,
+            avg(rankIC)                                     as rankIcMean,
+            std(rankIC)                                     as rankIcStd,
+            avg(rankIC) \ std(rankIC)                       as rankIcir,
+            (avg(rankIC) \ std(rankIC)) * sqrt(count(*))    as rankIcTStat,
+            avg(iif(rankIC > 0, 1.0, 0.0))                  as rankIcWinRate
+          from icTb
+
+print("---- IC / RankIC / ICIR  alpha=" + ALPHA_ID + " ----")
+summary
+
+// ---------------- Save ----------------
+saveText(icTb,    OUT_DIR + "/ic_" + ALPHA_ID + "_daily.csv")
+saveText(summary, OUT_DIR + "/ic_" + ALPHA_ID + "_summary.csv")
+print("saved to " + OUT_DIR)
+
+// Return summary table (run.py will print)
+summary

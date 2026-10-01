@@ -9,8 +9,6 @@
 *  @ FileName: gtja191alpha.dos
 */
 
-module gtja191Alpha
-
 //1. General cross-sectional factors:
 //The calculation process includes factors for time-series cross-sections or subject cross-sections (or both), without industry neutralization.
 //These factors take panel data as parameters and return panel data.
@@ -265,7 +263,7 @@ def gtjaAlpha29(close, vol){
 
 
 //alpha 30
-//WMA((REGRESI(CLOSE/DELAY(CLOSE)-1,MKT,SMB,HML，60))^2,20)
+//WMA((REGRESI(CLOSE/DELAY(CLOSE)-1,MKT,SMB,HML,60))^2,20)
 //The No. 30 factor involves the Fama French Three-factor. 
 //When calculating, you need to obtain the MKT, SMB, and HML corresponding to the timestamp, and input these three values ​​as vectors into parameters.
 

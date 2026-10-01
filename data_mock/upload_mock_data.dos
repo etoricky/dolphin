@@ -1,0 +1,73 @@
+/* ============================================================
+ * upload_mock_data persistence script: create the session variable uploaded by upload_mock_data.py into dfs://gtja/market
+ *     - Database: dfs://gtja; table: market (column names consistent with data_csv)
+ *     - When called by upload_mock_data.py, it pre-injects DB_URI / TB_NAME / DB_USER / DB_PASSWORD / FROM_VAR / RECREATE
+ *     - Can also be run standalone in the VS Code DolphinDB plugin (define FROM_VAR yourself first)
+ *
+ *   Idempotent: RECREATE=false (default) -> skip if the table already exists; true -> drop and recreate the DB first
+ * ============================================================ */
+
+if (!defined("DB_URI"))  DB_URI  = "dfs://gtja"
+if (!defined("TB_NAME")) TB_NAME = "market"
+if (!defined("RECREATE")) RECREATE = false
+if (!defined("FROM_VAR")) throw "FROM_VAR not defined: should be injected by upload_mock_data"
+
+// Login (use defaults below when not injected; upload_mock_data.py injects DB_USER/DB_PASSWORD from same-named constants in this file)
+if (!defined("DB_USER"))     DB_USER     = "admin"
+if (!defined("DB_PASSWORD")) DB_PASSWORD = "123456"
+login(DB_USER, DB_PASSWORD)
+
+if (existsDatabase(DB_URI) and RECREATE) {
+    dropDatabase(DB_URI)
+    print("dropped old database: " + DB_URI)
+}
+
+dbReady = existsDatabase(DB_URI)
+tblReady = false
+if (dbReady) {
+    tblReady = existsTable(DB_URI, TB_NAME)
+}
+
+if (tblReady) {
+    print("table " + TB_NAME + " already exists, skipping import (set RECREATE to true to recreate)")
+} else {
+    src = objByName(FROM_VAR)
+    t = select
+            timestamp(tradetime) as Timestamp,
+            symbol(securityid)   as Symbol,
+            double(open)         as MidOpen,
+            double(close)        as MidClose,
+            double(high)         as MidHigh,
+            double(low)          as MidLow,
+            double(vol)          as BarVolume,
+            double(vwap)         as BarVwap,
+            double(index_open)   as IndexOpen,
+            double(index_close)  as IndexClose
+        from src
+
+    if (dbReady) {
+        db = database(DB_URI)
+    } else {
+        mnM = month(min(t.Timestamp))
+        mxM = month(max(t.Timestamp))
+        months = mnM + 0..int(mxM - mnM)
+        dbDate = database("", VALUE, months)
+        dbSec  = database("", HASH, [SYMBOL, 20])
+        db     = database(DB_URI, COMPO, [dbDate, dbSec], engine="OLAP")
+    }
+
+    if (existsTable(DB_URI, TB_NAME)) {
+        pt = loadTable(DB_URI, TB_NAME)
+    } else {
+        pt = db.createPartitionedTable(t, TB_NAME, `Timestamp`Symbol)
+    }
+    pt.append!(t)
+    print("Imported " + string(size(t)) + " rows to " + DB_URI + "/" + TB_NAME)
+}
+
+print("---- market table statistics ----")
+select count(*) as rows, min(Timestamp) as startTime, max(Timestamp) as endTime
+from loadTable(DB_URI, TB_NAME)
+print("securities = " + string(size(exec distinct Symbol from loadTable(DB_URI, TB_NAME))))
+print("tradingDays = " + string(size(exec distinct Timestamp from loadTable(DB_URI, TB_NAME))))
+print("upload_mock_data.dos done.")

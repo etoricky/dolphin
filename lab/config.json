@@ -1,0 +1,10 @@
+{
+    "project_root": "C:/d/hub/dolphin",
+    "ddb_host": "127.0.0.1",
+    "ddb_port": 8848,
+    "ddb_username": "admin",
+    "ddb_password": "123456",
+    "db_uri": "dfs://gtja",
+    "market_tb": "market",
+    "alpha_tb": "alpha"
+}

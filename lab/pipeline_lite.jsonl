@@ -1,0 +1,7 @@
+{"action": "upload_csv_data", "params": {"py": "data_csv/upload_csv_data.py", "csv": "data_csv/data_lite.csv", "recreate": true}}
+{"action": "calc_gtja", "params": {"dos": "calc_gtja/calc.dos", "rebuild_alpha": true, "alpha_ids": [2, 3, 6]}}
+{"action": "calc_wq", "params": {"dos": "calc_wq/calc.dos", "rebuild_alpha": true, "alpha_ids": [1, 2, 6]}}
+{"action": "backtest01", "params": {"dos": "backtest01/backtest.dos", "alpha_id": "ja2", "groups": 5}}
+{"action": "backtest02", "params": {"dos": "backtest02/backtest.dos", "alpha_id": "ja2"}}
+{"action": "backtest03", "params": {"dos": "backtest03/backtest.dos", "expression": "-1 * ts_corr(ts_rank(log(vol), 6), ts_rank((close - open) / (high - low), 6), 6)", "out_dir": "backtest03/output"}}
+{"action": "plot", "params": {"py": "backtest01/plot.py", "alpha_id": "ja2", "out_dir": "backtest01/output"}}
