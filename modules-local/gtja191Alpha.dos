@@ -11,6 +11,14 @@
 
 module gtja191Alpha
 
+def module_info(){
+    res = dict(STRING,ANY)
+    res["moduleName"] = "gtja191Alpha"
+    res["moduleVersion"] = "1.0.0"
+    res["isFree"] = true
+    return res
+}
+
 //1. General cross-sectional factors:
 //The calculation process includes factors for time-series cross-sections or subject cross-sections (or both), without industry neutralization.
 //These factors take panel data as parameters and return panel data.

@@ -1,0 +1,103 @@
+/* ============================================================
+ * 03 GTJA191 因子横截面分层回测
+ *     - 读取 dfs://gtja/factor 中任一因子 + market 收盘价
+ *     - 每天按因子值把全市场分成 G 组（0=因子最小，G-1=因子最大）
+ *     - 统计各组等权日收益、累计净值、年化收益/波动/夏普、最大回撤
+ *     - 额外给出「多空组合」（因子最大组 - 因子最小组）
+ *     - 结果写入 output/ 目录的 CSV，方便画图
+ *   修改变量 factorId 即可回测不同因子。
+ *
+ *   注意：datatest.csv 是 DolphinDB 官方用于「验证因子计算」的合成数据，
+ *   价格是随机数、没有真实行情连续性，因此这里的绩效数字只用于证明
+ *   回测流程可跑通，不代表任何真实策略效果。
+ * ============================================================ */
+
+login("admin", "123456")
+
+// ---------------- 配置（可用 run.py 传参覆盖，未传参时用下面的默认值） ----------------
+if (!defined("G"))        G        = 5
+if (!defined("RET_CLIP")) RET_CLIP = 0.2
+if (!defined("factorId")) factorId = "ja1"      // 想换因子改这里，如 "ja5"
+
+DB_URI   = "dfs://gtja"
+TB_MKT   = "market"
+TB_FAC   = "factor"
+OUT_DIR  = "C:/d/hub/dolphin/gtja-lab/output"
+
+// ---------------- 基础数据（只需算一次） ----------------
+mkt    = select securityid, tradetime, close from loadTable(DB_URI, TB_MKT) order by securityid, tradetime
+rawRet = select securityid, tradetime, move(close, -1) \ close - 1 as fwdRet
+         from mkt context by securityid
+retTb  = select securityid, tradetime,
+                iif(fwdRet >  RET_CLIP,  RET_CLIP,
+                iif(fwdRet < -RET_CLIP, -RET_CLIP, fwdRet)) as fwdRet
+         from rawRet
+
+// ---------------- 回测函数 ----------------
+def backtestFactor(DB_URI, retTb, factorId, G) {
+    facTb = select tradetime, securityid, alphaValue as sig
+            from loadTable(DB_URI, `factor) where alphaId = factorId
+
+    // 因子 t 日取值 与 t -> t+1 收益 对齐
+    j = select f.tradetime as tradetime, f.securityid as securityid, f.sig as sig, r.fwdRet as fwdRet
+        from facTb f inner join retTb r on f.tradetime = r.tradetime and f.securityid = r.securityid
+
+    // 每日横截面按因子值分 G 组
+    j2 = select tradetime, securityid, sig, fwdRet,
+            iif(int(rank(sig, percent=true) * G) >= G, G-1, int(rank(sig, percent=true) * G)) as bucket
+         from j context by tradetime
+
+    // 去掉因子为空 / 收益为空的样本
+    j3 = select * from j2 where !isNull(bucket) and !isNull(fwdRet)
+
+    // 各组等权日收益
+    daily = select avg(fwdRet) as ret, count(fwdRet) as nStock from j3 group by tradetime, bucket
+
+    // 净值曲线
+    navTb = select tradetime, bucket, ret, cumprod(1 + ret) as nav from daily context by bucket
+
+    // 绩效指标
+    stats = select
+                count(*) as days,
+                prod(1 + ret) - 1                            as cumRet,
+                pow(prod(1 + ret), 252.0 \ count(*)) - 1     as annRet,
+                std(ret) * sqrt(252.0)                       as annVol,
+                (pow(prod(1 + ret), 252.0 \ count(*)) - 1) \
+                    (std(ret) * sqrt(252.0))                 as sharpe
+            from daily group by bucket
+
+    // 最大回撤
+    dd = select bucket, max(1 - nav \ cummax(nav)) as maxDD from navTb group by bucket
+
+    // 多空组合：因子最大组 - 因子最小组
+    wide  = exec ret from daily pivot by tradetime, bucket
+    lsRet = nullFill(wide[, G-1] - wide[, 0], 0.0)
+    ls = table(
+            count(lsRet)                                    as days,
+            prod(1 + lsRet) - 1                             as cumRet,
+            pow(prod(1 + lsRet), 252.0 \ count(lsRet)) - 1  as annRet,
+            std(lsRet) * sqrt(252.0)                        as annVol,
+            (pow(prod(1 + lsRet), 252.0 \ count(lsRet)) - 1) \
+                (std(lsRet) * sqrt(252.0))                  as sharpe
+         )
+
+    return dict(`daily`nav`stats`drawdown`ls, [daily, navTb, stats, dd, ls])
+}
+
+// ---------------- 执行 ----------------
+res = backtestFactor(DB_URI, retTb, factorId, G)
+
+print("---- 分层绩效指标 factor=" + factorId + "  (bucket 0=因子最小, " + string(G-1) + "=因子最大) ----")
+res.stats
+print("---- 最大回撤 ----")
+res.drawdown
+print("---- 多空组合 (top - bottom) ----")
+res.ls
+
+// ---------------- 存盘 ----------------
+saveText(res.daily, OUT_DIR + "/bt_" + factorId + "_daily.csv")
+saveText(res.nav,   OUT_DIR + "/bt_" + factorId + "_nav.csv")
+print("saved to " + OUT_DIR)
+
+// 返回统计表（run.py 会打印）
+res.stats

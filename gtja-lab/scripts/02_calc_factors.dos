@@ -1,0 +1,94 @@
+/* ============================================================
+ * 02 计算 GTJA191 因子并写入分布式表 dfs://gtja/factor
+ *
+ *   依赖：本脚本不再 `use` 服务端模块（服务端已无因子模块）。
+ *         因子公式由客户端 loader.py 注入到当前会话，函数名不带命名空间，
+ *         例如 gtjaCalAlpha1 / gtjaAlpha1。
+ *         请通过 run.py 运行：python run.py 2  （会自动先注入本地模块）
+ *
+ *   输出长表：tradetime, securityid, alphaId, alphaValue
+ *   因子矩阵行序 = 交易日升序，列序 = 证券代码升序（panel 会排序）
+ * ============================================================ */
+
+login("admin", "123456")
+
+// ---------------- 配置 ----------------
+DB_URI = "dfs://gtja"
+TB_MKT = "market"
+TB_FAC = "factor"
+
+// 先确认客户端本地模块已经注入到当前会话
+if (size(exec name from defs() where name = "gtjaCalAlpha1") == 0) {
+    throw "未找到 gtjaCalAlpha1：请用 `python run.py 2` 运行（run.py 会先注入 modules-local 里的公式）"
+}
+
+// 需要计算的因子编号（可改成 1..191 计算全部；21/30/116/147 官方未实现或需额外数据）
+factorList = 1..32
+skipList   = [21, 30, 116, 147]
+
+// ---------------- 1. 准备数据与面板 ----------------
+market = loadTable(DB_URI, TB_MKT)
+data   = select * from market order by tradetime, securityid
+
+startTime = min(data.tradetime)
+endTime   = max(data.tradetime)
+days = sort(exec distinct tradetime from data)    // 矩阵行标签
+sids = sort(exec distinct securityid from data)   // 矩阵列标签
+nDay = size(days)
+nSec = size(sids)
+nRow = nDay * nSec
+
+print("data: " + string(nDay) + " days x " + string(nSec) + " securities")
+
+// ---------------- 2. 建因子表 ----------------
+db = database(DB_URI)
+if (existsTable(DB_URI, TB_FAC)) {
+    dropTable(db, TB_FAC)
+}
+facSchema = table(1:0, `tradetime`securityid`alphaId`alphaValue,
+                  [TIMESTAMP, SYMBOL, SYMBOL, DOUBLE])
+facPt = db.createPartitionedTable(facSchema, TB_FAC, `tradetime`securityid)
+
+// 矩阵（列优先 flatten）-> 长表
+def repN(x, n) { return take(x, n) }
+def matToLong(m, days, sids, nDay, nRow, alphaId) {
+    return table(
+        take(days, nRow)                     as tradetime,
+        flatten(each(repN, sids, nDay))      as securityid,
+        take(alphaId, nRow)                  as alphaId,
+        m.flatten()                          as alphaValue
+    )
+}
+
+// ---------------- 3. 逐个计算 ----------------
+okList = array(INT)
+failList = array(INT)
+t0 = now()
+
+for (fid in factorList) {
+    if (fid in skipList) { continue }
+    alphaId = "ja" + string(fid)
+    try {
+        callExpr = "gtjaCalAlpha" + string(fid) + "(data, startTime, endTime)"
+        m = parseExpr(callExpr).eval()
+        facPt.append!(matToLong(m, days, sids, nDay, nRow, alphaId))
+        okList.append!(fid)
+    } catch (ex) {
+        failList.append!(fid)
+        print("FAILED " + alphaId + " : " + ex)
+    }
+}
+
+// ---------------- 4. 校验 ----------------
+print("---- factor 表统计 ----")
+print("computed = " + string(size(okList)) + " factors")
+if (size(failList) == 0) {
+    print("failed   = none")
+} else {
+    print("failed   = " + concat(string(failList), ", "))
+}
+print("elapsed  = " + string(now() - t0))
+
+select count(*) as rows from loadTable(DB_URI, TB_FAC)
+print("factorIds = " + concat(exec distinct alphaId from loadTable(DB_URI, TB_FAC), ", "))
+print("02_calc_factors.dos done.")

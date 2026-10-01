@@ -1,0 +1,58 @@
+/* ============================================================
+ * 01 创建分布式数据库并导入市场日频行情
+ *     - 数据库：dfs://gtja
+ *     - 表    ：market (tradetime, securityid, open, close, high, low,
+ *                        vol, vwap, index_open, index_close)
+ *     - 分区  ：按「月」VALUE 分区 + 按 securityid HASH 20 分区
+ *   既可在 VS Code 的 DolphinDB 插件里直接运行，也可用 run.py 运行。
+ * ============================================================ */
+
+// ---------------- 配置 ----------------
+CSV_PATH = "C:/d/hub/dolphin/modules-local/datatest.csv"
+DB_URI   = "dfs://gtja"
+TB_NAME  = "market"
+
+login("admin", "123456")
+
+// ---------------- 1. 读取原始数据 ----------------
+raw = loadText(CSV_PATH)
+
+// 统一字段名与类型（tradetime 由 loadText 自动识别为 TIMESTAMP）
+t = select
+        tradetime,
+        symbol(securityid)   as securityid,
+        double(open)         as open,
+        double(close)        as close,
+        double(high)         as high,
+        double(low)          as low,
+        double(vol)          as vol,
+        double(vwap)         as vwap,
+        double(index_open)   as index_open,
+        double(index_close)  as index_close
+    from raw
+
+// ---------------- 2. 创建数据库 ----------------
+if (existsDatabase(DB_URI)) {
+    dropDatabase(DB_URI)
+}
+
+mnM = month(min(t.tradetime))
+mxM = month(max(t.tradetime))
+months = mnM + 0..int(mxM - mnM)          // 例如 2010.01M ~ 2010.12M
+
+dbDate = database("", VALUE, months)
+dbSec  = database("", HASH, [SYMBOL, 20])
+db     = database(DB_URI, COMPO, [dbDate, dbSec], engine="OLAP")
+
+// ---------------- 3. 建表并写入 ----------------
+pt = db.createPartitionedTable(t, TB_NAME, `tradetime`securityid)
+pt.append!(t)
+
+// ---------------- 4. 校验 ----------------
+print("---- market 表统计 ----")
+select count(*) as rows, min(tradetime) as startTime, max(tradetime) as endTime
+from loadTable(DB_URI, TB_NAME)
+print("securities = " + string(size(exec distinct securityid from loadTable(DB_URI, TB_NAME))))
+print("tradingDays = " + string(size(exec distinct tradetime from loadTable(DB_URI, TB_NAME))))
+
+print("01_create_market_db.dos done.")
