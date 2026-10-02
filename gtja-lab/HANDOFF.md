@@ -21,7 +21,7 @@ DolphinDB 上的 **GTJA191 因子计算 + 横截面分层回测** 实验台。
 | server home | `C:\d\hub\run\DolphinDB_Win64_V2.00.19\server` |
 | Python | 3.10（`pip install dolphindb`，实测 3.0.6.0） |
 | 服务端 `{home}/modules` | **已清空**（故意为之，见第 4 节） |
-| 行情数据 | `modules-local/datatest.csv`（~170MB）**本地保留、不入库**，获取见第 7 节 |
+| 行情数据 | `data-local/datatest.csv`（~170MB）**本地保留、不入库**，获取见第 7 节 |
 
 ---
 
@@ -31,11 +31,12 @@ DolphinDB 上的 **GTJA191 因子计算 + 横截面分层回测** 实验台。
 dolphin/
 ├─ modules-local/                     # 客户端公式源码（lab 在用）
 │   ├─ gtja191Alpha.dos               #   191 个因子公式
-│   ├─ gtja191Prepare.dos             #   面板准备 + gtjaCalAlpha1..191
-│   ├─ fetch_data.py                  #   一键下载解压行情数据（clone 后跑一次）
-│   └─ datatest.csv                   #   行情原始数据（本地保留，不入库，获取见第 7 节）
+│   └─ gtja191Prepare.dos             #   面板准备 + gtjaCalAlpha1..191
 ├─ modules-unused/                    # 暂不用的模块
 │   └─ alphalens / ta / mytt / wq101alpha / gtja191AlphaRes / gtja191StreamTest
+├─ data-local/                        # 行情数据（本地保留、不入库）
+│   ├─ fetch_data.py                  #   一键下载解压（clone 后跑一次）
+│   └─ datatest.csv                   #   行情原始数据 ~170MB
 └─ gtja-lab/
     ├─ config.py                      # 连接参数、路径、LOCAL_MODULES
     ├─ ddb.py                         # 建会话 / 执行 .dos / 打印
@@ -196,13 +197,13 @@ sz000001: 37.7 → 12.6 → 51.1 → 94.7 → 50.2 → 57.1 → 16.1 ...
 4. **下载行情数据**（保留在本地，但不入库；只有上库那一步需要）：
 
    ```powershell
-   python modules-local/fetch_data.py
+   python data-local/fetch_data.py
    ```
 
-   脚本会从官方地址下载 `191_data.zip`，解压出 `modules-local/datatest.csv`
+   脚本会从官方地址下载 `191_data.zip`，解压出 `data-local/datatest.csv`
    （约 170MB），临时压缩包自动删除；已有数据时会跳过。
    手动替代方案：下载 <https://www.dolphindb.cn/downloads/docs/191_data.zip>
-   解压出 `datatest.csv` 放到 `modules-local/`。
+   解压出 `datatest.csv` 放到 `data-local/`。
 
    > 只有 `run.py 1`（建库 / 重建）会读这个 CSV。日常 `run.py 2/3/4` 不读，
    > 因为行情已经在 DolphinDB 的 `dfs://gtja/market` 里了。
@@ -210,6 +211,7 @@ sz000001: 37.7 → 12.6 → 51.1 → 94.7 → 50.2 → 57.1 → 16.1 ...
 5. 改 `gtja-lab/config.py`：
    - `DDB_HOME` → 你机器上的 DolphinDB server 目录
    - `MODULES_LOCAL` → 本仓库 `modules-local/` 的绝对路径
+   - `DATA_LOCAL` → 本仓库 `data-local/` 的绝对路径
 6. 跑：
 
 ```powershell

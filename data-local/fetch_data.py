@@ -3,11 +3,11 @@
 """下载并解压 GTJA191 因子测试用的行情数据到本目录。
 
 用法（在仓库根目录或任意位置执行都可以）：
-    python modules-local/fetch_data.py       # 已有 datatest.csv 就跳过
-    python modules-local/fetch_data.py -f    # 强制重新下载
+    python data-local/fetch_data.py       # 已有 datatest.csv 就跳过
+    python data-local/fetch_data.py -f    # 强制重新下载
 
 数据来源：https://www.dolphindb.cn/downloads/docs/191_data.zip
-解压后得到 modules-local/datatest.csv（约 170MB），临时 zip 会自动删除。
+解压后得到 data-local/datatest.csv（约 170MB），临时 zip 会自动删除。
 
 只有 `run.py 1`（建库 / 重建）需要这个 CSV；日常 `run.py 2/3/4` 不读它，
 因为行情已经在 DolphinDB 的 dfs://gtja/market 里了。

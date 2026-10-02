@@ -52,6 +52,9 @@ def get_session():
 def build_preamble(key, factor_id, overrides):
     """把命令行参数变成 DolphinDB 变量赋值，拼在脚本最前面。"""
     lines = [ov + ";" for ov in overrides]
+    if key == "1":
+        # 行情 CSV 路径由 config.py 统一提供，避免 .dos 里再硬编码一份
+        lines.append(f'CSV_PATH = "{config.RAW_CSV.replace(chr(92), "/")}";')
     if key == "3" and factor_id:
         lines.append(f'factorId = "{factor_id}";')
     return "\n".join(lines) + ("\n" if lines else "")

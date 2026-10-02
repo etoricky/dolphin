@@ -3,6 +3,6 @@ __pycache__/
 gtja-lab/output/
 
 # 行情原始数据 ~170MB：保留在本地，但不入库。
-# 首次获取（或换机器后）跑一次：python modules-local/fetch_data.py
-modules-local/datatest.csv
-modules-local/datatest.csv.tar.gz
+# 首次获取（或换机器后）跑一次：python data-local/fetch_data.py
+data-local/datatest.csv
+data-local/datatest.csv.tar.gz
