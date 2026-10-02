@@ -32,6 +32,7 @@ dolphin/
 ├─ modules-local/                     # 客户端公式源码（lab 在用）
 │   ├─ gtja191Alpha.dos               #   191 个因子公式
 │   ├─ gtja191Prepare.dos             #   面板准备 + gtjaCalAlpha1..191
+│   ├─ fetch_data.py                  #   一键下载解压行情数据（clone 后跑一次）
 │   └─ datatest.csv                   #   行情原始数据（需自行下载，不入库，见第 7 节）
 ├─ modules-unused/                    # 暂不用的模块
 │   └─ alphalens / ta / mytt / wq101alpha / gtja191AlphaRes / gtja191StreamTest
@@ -193,12 +194,19 @@ sz000001: 37.7 → 12.6 → 51.1 → 94.7 → 50.2 → 57.1 → 16.1 ...
 2. `pip install dolphindb`（Python 3.10）
 3. `git clone` 本仓库（只有代码，几十 KB）
 4. **下载行情数据**（不在仓库里，也不在本地；只在上库那一步需要）：
-   1. 下载 <https://www.dolphindb.cn/downloads/docs/191_data.zip>
-   2. 解压出 `datatest.csv`，放到 `modules-local/` 下
+
+   ```powershell
+   python modules-local/fetch_data.py
+   ```
+
+   脚本会从官方地址下载 `191_data.zip`，解压出 `modules-local/datatest.csv`
+   （约 170MB），临时压缩包自动删除；已有数据时会跳过。
+   手动替代方案：下载 <https://www.dolphindb.cn/downloads/docs/191_data.zip>
+   解压出 `datatest.csv` 放到 `modules-local/`。
 
    > 只有 `run.py 1`（建库 / 重建）会读这个 CSV。日常 `run.py 2/3/4` 不读，
    > 因为行情已经在 DolphinDB 的 `dfs://gtja/market` 里了。
-   > 所以**只有 `RECREATE=true` 或库被删掉时才需要重新下载**。
+   > 所以**只有 `RECREATE=true` 或库被删掉时才需要这个 CSV**。
 5. 改 `gtja-lab/config.py`：
    - `DDB_HOME` → 你机器上的 DolphinDB server 目录
    - `MODULES_LOCAL` → 本仓库 `modules-local/` 的绝对路径
