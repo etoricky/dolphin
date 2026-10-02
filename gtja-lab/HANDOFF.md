@@ -21,6 +21,7 @@ DolphinDB 上的 **GTJA191 因子计算 + 横截面分层回测** 实验台。
 | server home | `C:\d\hub\run\DolphinDB_Win64_V2.00.19\server` |
 | Python | 3.10（`pip install dolphindb`，实测 3.0.6.0） |
 | 服务端 `{home}/modules` | **已清空**（故意为之，见第 4 节） |
+| 行情数据 | `modules-local/datatest.csv`（~170MB）**不入库**，见第 7 节下载 |
 
 ---
 
@@ -31,7 +32,7 @@ dolphin/
 ├─ modules-local/                     # 客户端公式源码（lab 在用）
 │   ├─ gtja191Alpha.dos               #   191 个因子公式
 │   ├─ gtja191Prepare.dos             #   面板准备 + gtjaCalAlpha1..191
-│   └─ datatest.csv                   #   行情原始数据（~177MB，合成数据）
+│   └─ datatest.csv                   #   行情原始数据（需自行下载，不入库，见第 7 节）
 ├─ modules-unused/                    # 暂不用的模块
 │   └─ alphalens / ta / mytt / wq101alpha / gtja191AlphaRes / gtja191StreamTest
 └─ gtja-lab/
@@ -190,11 +191,18 @@ sz000001: 37.7 → 12.6 → 51.1 → 94.7 → 50.2 → 57.1 → 16.1 ...
 1. 装 DolphinDB 2.00.x，单节点起在 `8848`，账号 `admin` / `123456`
    （`getHomeDir()` 能返回 server 目录即正常）
 2. `pip install dolphindb`（Python 3.10）
-3. `git clone` 本仓库（注意 `modules-local/datatest.csv` 有 ~177MB）
-4. 改 `gtja-lab/config.py`：
+3. `git clone` 本仓库（只有代码，几十 KB）
+4. **下载行情数据**（不在仓库里，也不在本地；只在上库那一步需要）：
+   1. 下载 <https://www.dolphindb.cn/downloads/docs/191_data.zip>
+   2. 解压出 `datatest.csv`，放到 `modules-local/` 下
+
+   > 只有 `run.py 1`（建库 / 重建）会读这个 CSV。日常 `run.py 2/3/4` 不读，
+   > 因为行情已经在 DolphinDB 的 `dfs://gtja/market` 里了。
+   > 所以**只有 `RECREATE=true` 或库被删掉时才需要重新下载**。
+5. 改 `gtja-lab/config.py`：
    - `DDB_HOME` → 你机器上的 DolphinDB server 目录
    - `MODULES_LOCAL` → 本仓库 `modules-local/` 的绝对路径
-5. 跑：
+6. 跑：
 
 ```powershell
 cd gtja-lab
