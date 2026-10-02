@@ -34,17 +34,17 @@ dolphin/
 │   └─ gtja191Prepare.dos             #   面板准备 + gtjaCalAlpha1..191
 ├─ modules-unused/                    # 暂不用的模块
 │   └─ alphalens / ta / mytt / wq101alpha / gtja191AlphaRes / gtja191StreamTest
-├─ data-local/                        # 行情数据（本地保留、不入库）
+├─ data-local/                        # 行情数据 + 入库脚本（csv 不入库）
 │   ├─ fetch_data.py                  #   一键下载解压（clone 后跑一次）
-│   └─ datatest.csv                   #   行情原始数据 ~170MB
+│   ├─ datatest.csv                   #   行情原始数据 ~170MB（本地保留、不入库）
+│   └─ 01_create_market_db.dos        #   建库 + 导入行情
 └─ gtja-lab/
-    ├─ config.py                      # 连接参数、路径、LOCAL_MODULES
+    ├─ config.py                      # 连接参数、路径、LOCAL_MODULES、DATA_LOCAL
     ├─ ddb.py                         # 建会话 / 执行 .dos / 打印
     ├─ loader.py                      # 把 modules-local 注入服务端会话【核心】
     ├─ run.py                         # 入口：python run.py 1|2|3|4|all
     ├─ plot.py                        # 画分层净值曲线
     ├─ scripts/
-    │   ├─ 01_create_market_db.dos    # 建库 + 导入行情
     │   ├─ 02_calc_factors.dos        # 算因子并落库
     │   └─ 03_backtest.dos            # 分层回测
     └─ output/                        # 生成的 CSV / PNG（已 gitignore）

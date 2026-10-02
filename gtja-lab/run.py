@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""统一入口：连接 DolphinDB 并执行 scripts/ 下的步骤脚本。
+"""统一入口：连接 DolphinDB 并依次执行各步骤脚本。
 
 因子公式来自「客户端」的 modules-local/ 目录，由 loader.py 在会话建立后
 注入到服务端执行（不再使用服务端的 `use`）。
@@ -23,11 +23,13 @@ import config
 import loader
 from ddb import connect, run_file, show
 
-# 步骤号 -> DolphinDB 脚本
+# 步骤号 -> 脚本绝对路径
+# 01 是「行情入库」，跟数据放一起（data-local/）；
+# 02 / 03 是分析流程，放在 gtja-lab/scripts/。
 STEPS = {
-    "1": "01_create_market_db.dos",
-    "2": "02_calc_factors.dos",
-    "3": "03_backtest.dos",
+    "1": os.path.join(config.DATA_LOCAL, "01_create_market_db.dos"),
+    "2": os.path.join(config.SCRIPTS_DIR, "02_calc_factors.dos"),
+    "3": os.path.join(config.SCRIPTS_DIR, "03_backtest.dos"),
 }
 
 _sess = None
@@ -61,9 +63,9 @@ def build_preamble(key, factor_id, overrides):
 
 
 def run_dos_step(sess, key, factor_id=None, overrides=()):
-    name = STEPS[key]
-    res = run_file(sess, name, build_preamble(key, factor_id, overrides))
-    show(res, f"result of step {key} ({name})")
+    path = STEPS[key]
+    res = run_file(sess, path, build_preamble(key, factor_id, overrides))
+    show(res, f"result of step {key} ({os.path.basename(path)})")
 
 
 def run_plot_step(factor_id="ja1"):
