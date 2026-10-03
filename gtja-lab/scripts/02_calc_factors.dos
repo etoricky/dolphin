@@ -4,7 +4,7 @@
  *   依赖：本脚本不再 `use` 服务端模块（服务端已无因子模块）。
  *         因子公式由客户端 loader.py 注入到当前会话，函数名不带命名空间，
  *         例如 gtjaCalAlpha1 / gtjaAlpha1。
- *         请通过 run.py 运行：python run.py 2  （会自动先注入本地模块）
+ *         请通过 run.py 运行：python run.py '{"step":"calc_factors"}'  （会自动先注入本地模块）
  *
  *   列名：market 表用 lab 自定义列名（Timestamp/Symbol/MidOpen/...），
  *         本脚本用官方 prepareData 适配成 GTJA191 标准字段后再计算，模块本身不改动。
@@ -31,13 +31,13 @@ skipList   = [21, 30, 116, 147]
 
 // ---------------- 0. 前置检查 ----------------
 if (size(exec name from defs() where name = "gtjaCalAlpha1") == 0) {
-    throw "未找到 gtjaCalAlpha1：请用 `python run.py 2` 运行（run.py 会先注入 modules-local 里的公式）"
+    throw "未找到 gtjaCalAlpha1：请通过 run.py 的 calc_factors 步骤运行（run.py 会先注入 modules-local 里的公式）"
 }
 if (!existsDatabase(DB_URI)) {
-    throw "数据库 " + DB_URI + " 不存在，请先运行: python run.py 1"
+    throw "数据库 " + DB_URI + " 不存在，请先运行 load_market 步骤"
 }
 if (!existsTable(DB_URI, TB_MKT)) {
-    throw "表 " + DB_URI + "/" + TB_MKT + " 不存在，请先运行: python run.py 1"
+    throw "表 " + DB_URI + "/" + TB_MKT + " 不存在，请先运行 load_market 步骤"
 }
 
 // ---------------- 1. 准备数据与面板 ----------------

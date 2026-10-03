@@ -42,7 +42,8 @@ dolphin/
     ├─ config.py                      # 连接参数、路径、LOCAL_MODULES、DATA_LOCAL
     ├─ ddb.py                         # 建会话 / 执行 .dos / 打印
     ├─ loader.py                      # 把 modules-local 注入服务端会话【核心】
-    ├─ run.py                         # 入口：python run.py 1|2|3|4|all
+    ├─ run.py                         # 入口：读 JSONL 流水线（step + params）
+    ├─ pipeline.jsonl                 # 示例流水线（可复制修改）
     ├─ plot.py                        # 画分层净值曲线
     ├─ scripts/
     │   ├─ 02_calc_factors.dos        # 算因子并落库
@@ -152,12 +153,13 @@ data = prepareData(rawData = rawData, startTime = startTime, endTime = endTime,
 | `01` | `RECREATE` | `false` | 库/表已存在就跳过导入；`true` 则删库重建 |
 | `02` | `REBUILD_FACTOR` | `true` | `true` 重建因子表；`false` 只补算还没算过的因子 |
 
-命令行覆盖：`python run.py 1 RECREATE=true` / `python run.py 2 REBUILD_FACTOR=false`
-（任何 `KEY=VALUE` 参数都会作为变量注入到 .dos 最前面）。
+命令行覆盖：参数写在 JSONL 的 `params` 里，例如
+`{"step":"load_market","params":{"recreate":true}}` / `{"step":"calc_factors","params":{"rebuildFactor":false}}`
+（`params` 会被翻译成 DolphinDB 变量，注入到 .dos 最前面）。
 
-> **改过列名或分区方案后，必须 `RECREATE=true`** ——
-> 否则 `01` 会因为「表已存在」而跳过，留下旧 schema，后面步骤就会报莫名其妙的错。
-> 删库会连带删掉 `factor` 表，记得重跑 `run.py 2`。
+> **改过列名或分区方案后，必须 `recreate=true`** ——
+> 否则 `load_market` 会因为「表已存在」而跳过，留下旧 schema，后面步骤就会报莫名其妙的错。
+> 删库会连带删掉 `factor` 表，记得重跑 `calc_factors` 步骤。
 
 ### 5.6 datatest.csv 是合成随机数据
 
@@ -205,9 +207,9 @@ sz000001: 37.7 → 12.6 → 51.1 → 94.7 → 50.2 → 57.1 → 16.1 ...
    手动替代方案：下载 <https://www.dolphindb.cn/downloads/docs/191_data.zip>
    解压出 `datatest.csv` 放到 `data-local/`。
 
-   > 只有 `run.py 1`（建库 / 重建）会读这个 CSV。日常 `run.py 2/3/4` 不读，
+   > 只有 `load_market`（建库 / 重建）这一步会读这个 CSV；`calc_factors` / `backtest` / `plot` 不读，
    > 因为行情已经在 DolphinDB 的 `dfs://gtja/market` 里了。
-   > 所以**只有 `RECREATE=true` 或库被删掉时才需要这个 CSV**。
+   > 所以**只有 `recreate=true` 或库被删掉时才需要这个 CSV**。
 5. 改 `gtja-lab/config.py`：
    - `DDB_HOME` → 你机器上的 DolphinDB server 目录
    - `MODULES_LOCAL` → 本仓库 `modules-local/` 的绝对路径
@@ -216,7 +218,7 @@ sz000001: 37.7 → 12.6 → 51.1 → 94.7 → 50.2 → 57.1 → 16.1 ...
 
 ```powershell
 cd gtja-lab
-python run.py all
+python run.py pipeline.jsonl
 ```
 
 ---
@@ -226,14 +228,17 @@ python run.py all
 ```powershell
 cd gtja-lab
 
-python run.py all                       # 全流程：建库 -> 因子 -> 回测 -> 出图
-python run.py 1                         # 建库 + 导入（已存在则跳过）
-python run.py 1 RECREATE=true           # 强制删库重建
-python run.py 2                         # 重算因子（重建因子表）
-python run.py 2 REBUILD_FACTOR=false    # 只补算新增因子
-python run.py 3 4 ja5                   # 回测并画 ja5
-python loader.py                        # 单独验证客户端模块能否注入
+python run.py pipeline.jsonl                        # 全流程：建库 -> 因子 -> 回测 -> 出图
+python run.py '{"step":"load_market","params":{"recreate":true}}'          # 强制删库重建
+python run.py '{"step":"calc_factors","params":{"rebuildFactor":false}}'   # 只补算新增因子
+python run.py '{"step":"backtest","params":{"factorId":"ja5","groups":5}}' # 回测 ja5
+python run.py '{"step":"plot","params":{"factorId":"ja5"}}'                # 画 ja5 净值
+python run.py < pipeline.jsonl                      # 从 stdin 读（可管道串联）
+python loader.py                                    # 单独验证客户端模块能否注入
 ```
+
+步骤名：`load_market` / `calc_factors` / `backtest` / `plot`；
+参数见 `run.py` 顶部 docstring 或 `pipeline.jsonl`。
 
 `scripts/*.dos` 也可以直接在 VS Code 的 DolphinDB 插件里跑，但**需要先注入客户端模块**
 （见 4.3），否则 `02` 会报 `gtjaCalAlpha1 is not defined`。

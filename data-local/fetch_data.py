@@ -9,8 +9,8 @@
 数据来源：https://www.dolphindb.cn/downloads/docs/191_data.zip
 解压后得到 data-local/datatest.csv（约 170MB），临时 zip 会自动删除。
 
-只有 `run.py 1`（建库 / 重建）需要这个 CSV；日常 `run.py 2/3/4` 不读它，
-因为行情已经在 DolphinDB 的 dfs://gtja/market 里了。
+只有 `load_market` 步骤（建库 / 重建）需要这个 CSV；`calc_factors` / `backtest` / `plot`
+不读它，因为行情已经在 DolphinDB 的 dfs://gtja/market 里了。
 """
 import argparse
 import os

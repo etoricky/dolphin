@@ -22,7 +22,7 @@ plt.rcParams["axes.unicode_minus"] = False
 def plot_nav(factor_id="ja1", show_ls=True):
     nav_path = os.path.join(config.OUTPUT_DIR, f"bt_{factor_id}_nav.csv")
     if not os.path.exists(nav_path):
-        raise FileNotFoundError(f"{nav_path} 不存在，请先运行: python run.py 3")
+        raise FileNotFoundError(f"{nav_path} 不存在，请先跑 backtest 步骤")
 
     nav = pd.read_csv(nav_path)
     nav["tradetime"] = pd.to_datetime(nav["tradetime"])
