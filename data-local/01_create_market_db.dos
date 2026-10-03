@@ -15,9 +15,9 @@
  * ============================================================ */
 
 // ---------------- 配置 ----------------
-// 行情原始数据（本地保留、不入库）：首次需跑 `python data-local/fetch_data.py`
-// run.py 会用 config.py 的 DATA_LOCAL 覆盖下面这个默认路径
-if (!defined("CSV_PATH")) CSV_PATH = "C:/d/hub/dolphin/data-local/datatest.csv"
+// 行情 CSV 路径由 run.py 从 JSONL 的 load_market.csv 参数注入（必填，无默认值）。
+// 若要在 VS Code 插件里单独跑本脚本，请先自行定义 CSV_PATH 再执行。
+if (!defined("CSV_PATH")) throw "CSV_PATH 未定义：请通过 run.py 的 load_market 步骤的 csv 参数传入"
 DB_URI   = "dfs://gtja"
 TB_NAME  = "market"
 if (!defined("RECREATE")) RECREATE = false

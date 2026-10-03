@@ -39,7 +39,7 @@ dolphin/
 │   ├─ datatest.csv                   #   行情原始数据 ~170MB（本地保留、不入库）
 │   └─ 01_create_market_db.dos        #   建库 + 导入行情
 └─ gtja-lab/
-    ├─ config.py                      # 连接参数、路径、LOCAL_MODULES、DATA_LOCAL
+    ├─ config.py                      # 连接参数、路径、LOCAL_MODULES
     ├─ ddb.py                         # 建会话 / 执行 .dos / 打印
     ├─ loader.py                      # 把 modules-local 注入服务端会话【核心】
     ├─ run.py                         # 入口：读 JSONL 流水线（step + params）
@@ -161,6 +161,13 @@ data = prepareData(rawData = rawData, startTime = startTime, endTime = endTime,
 > 否则 `load_market` 会因为「表已存在」而跳过，留下旧 schema，后面步骤就会报莫名其妙的错。
 > 删库会连带删掉 `factor` 表，记得重跑 `calc_factors` 步骤。
 
+`load_market` 的「测试资料」必须显式给出：`dos` = 要执行的建库脚本，`csv` = 导入的
+行情文件。两者都是**必填**，代码里不内置默认路径，缺省直接报错：
+
+```
+{"step":"load_market","params":{"dos":"C:/data/load_v2.dos","csv":"C:/data/dataset_v2.csv","recreate":true}}
+```
+
 ### 5.6 datatest.csv 是合成随机数据
 
 这是 DolphinDB 官方用于**验证因子计算正确性**的数据，价格完全没有连续性：
@@ -213,7 +220,8 @@ sz000001: 37.7 → 12.6 → 51.1 → 94.7 → 50.2 → 57.1 → 16.1 ...
 5. 改 `gtja-lab/config.py`：
    - `DDB_HOME` → 你机器上的 DolphinDB server 目录
    - `MODULES_LOCAL` → 本仓库 `modules-local/` 的绝对路径
-   - `DATA_LOCAL` → 本仓库 `data-local/` 的绝对路径
+   再按你机器改 `gtja-lab/pipeline.jsonl` 里 `load_market` 的 `dos` / `csv` 绝对路径
+   （这两个是必填参数，代码里不内置默认值）。
 6. 跑：
 
 ```powershell

@@ -1,4 +1,4 @@
-{"step": "load_market", "params": {"recreate": false}}
+{"step": "load_market", "params": {"dos": "c:/d/hub/dolphin/data-local/01_create_market_db.dos", "csv": "c:/d/hub/dolphin/data-local/datatest.csv", "recreate": false}}
 {"step": "calc_factors", "params": {"rebuildFactor": true}}
 {"step": "backtest", "params": {"factorId": "ja1", "groups": 5}}
 {"step": "plot", "params": {"factorId": "ja1"}}

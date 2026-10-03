@@ -25,11 +25,6 @@ MODULES_LOCAL = r"c:\d\hub\dolphin\modules-local"
 # 本地模块名（不含 .dos 后缀），按依赖顺序排列
 LOCAL_MODULES = ("gtja191Alpha", "gtja191Prepare")
 
-# ---------------- 行情原始数据（本地保留、不入库） ----------------
-# 首次获取 / 换机器后跑一次：python data-local/fetch_data.py
-DATA_LOCAL = r"c:\d\hub\dolphin\data-local"
-RAW_CSV = os.path.join(DATA_LOCAL, "datatest.csv")
-
 # ---------------- 本项目的 DolphinDB 脚本目录 ----------------
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.join(PROJECT_DIR, "scripts")

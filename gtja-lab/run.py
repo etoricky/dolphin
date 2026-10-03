@@ -10,16 +10,20 @@ DolphinDB 变量，注入到对应 .dos 脚本的最前面。任一步失败立�
     python run.py < pipeline.jsonl                      # 从 stdin 读（可管道串联）
     python run.py '{"step":"backtest","params":{"factorId":"ja1"}}'   # 单条内联 JSON
 
-可用步骤与参数（params 可省略，省略即用 .dos / plot 里的默认值）:
+可用步骤与参数（未标「必填」的 params 可省略，省略即用 .dos / plot 里的默认值）:
 
-    load_market    建库 + 导入行情        params: recreate (bool)
+    load_market    建库 + 导入行情        params: dos (str, 必填), csv (str, 必填), recreate (bool)
     calc_factors   计算并落库 GTJA191 因子  params: rebuildFactor (bool)
     backtest       横截面分层回测          params: factorId (str), groups (int), retClip (float)
     plot           画分层净值曲线          params: factorId (str), showLs (bool)
 
+    load_market 的测试资料必须由 params 显式给出（代码里不内置默认路径），缺省即报错：
+        dos -> 要执行的建库脚本
+        csv -> 导入的行情文件
+
 示例流水线:
 
-    {"step": "load_market",  "params": {"recreate": false}}
+    {"step": "load_market",  "params": {"dos": "c:/d/hub/dolphin/data-local/01_create_market_db.dos", "csv": "c:/d/hub/dolphin/data-local/datatest.csv", "recreate": false}}
     {"step": "calc_factors", "params": {"rebuildFactor": true}}
     {"step": "backtest",     "params": {"factorId": "ja1", "groups": 5}}
     {"step": "plot",         "params": {"factorId": "ja1"}}
@@ -36,12 +40,17 @@ import loader
 from ddb import connect, run_file, show
 
 # 步骤名 -> 执行方式
-#   script: 要跑的 .dos 文件
-#   params: JSON 参数名 -> DolphinDB 变量名（"python": true 的步骤直接传 Python 函数）
+#   script:      默认要跑的 .dos 文件（无 scriptParam 时使用）
+#   python:      true 表示走 Python 函数，不走 .dos
+#   params:      JSON 参数名 -> DolphinDB 变量名
+#   scriptParam: 覆盖 script 的参数名（可选）
+#   required:    必填的参数名（缺省即报错）
 STEPS = {
     "load_market": {
-        "script": os.path.join(config.DATA_LOCAL, "01_create_market_db.dos"),
-        "params": {"recreate": "RECREATE"},
+        # 建库脚本与 CSV 都必须由 params 提供：dos=要执行的 .dos，csv=导入的行情文件
+        "scriptParam": "dos",
+        "params": {"recreate": "RECREATE", "csv": "CSV_PATH"},
+        "required": ("dos", "csv"),
     },
     "calc_factors": {
         "script": os.path.join(config.SCRIPTS_DIR, "02_calc_factors.dos"),
@@ -83,18 +92,24 @@ def _ddb_literal(value):
     if isinstance(value, (int, float)):
         return repr(value)
     if isinstance(value, str):
-        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        # 反斜杠统一成 "/"，避免 Windows 路径在 DolphinDB 字符串里被当转义
+        return '"' + value.replace("\\", "/").replace('"', '\\"') + '"'
     raise ValueError(f"params 只支持 bool/int/float/str，收到 {value!r} ({type(value).__name__})")
 
 
 def build_preamble(step, params):
-    """把 params 变成 DolphinDB 变量赋值，拼在 .dos 脚本最前面。"""
+    """把 params 里映射到 DolphinDB 变量的部分，拼成赋值语句放在 .dos 最前面。"""
     mapping = STEPS[step]["params"]
-    lines = [f"{mapping[key]} = {_ddb_literal(value)};" for key, value in params.items()]
-    if step == "load_market":
-        # 行情 CSV 路径由 config.py 统一提供，避免 .dos 里再硬编码一份
-        lines.insert(0, f'CSV_PATH = "{config.RAW_CSV.replace(chr(92), "/")}";')
+    lines = [f"{mapping[k]} = {_ddb_literal(v)};" for k, v in params.items() if k in mapping]
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _allowed_params(spec):
+    """一个步骤允许的 JSON 参数名（含可覆盖脚本的 scriptParam）。"""
+    allowed = list(spec["params"])
+    if spec.get("scriptParam"):
+        allowed.append(spec["scriptParam"])
+    return allowed
 
 
 def run_step(step, params):
@@ -102,17 +117,24 @@ def run_step(step, params):
     spec = STEPS.get(step)
     if spec is None:
         raise ValueError(f"未知步骤 {step!r}；可用: {', '.join(STEPS)}")
-    unknown = [key for key in params if key not in spec["params"]]
+    allowed = _allowed_params(spec)
+    unknown = [key for key in params if key not in allowed]
     if unknown:
         raise ValueError(
             f"步骤 {step!r} 不支持参数 {', '.join(map(repr, unknown))}；"
-            f"可用: {', '.join(spec['params']) or '（无）'}"
+            f"可用: {', '.join(allowed) or '（无）'}"
+        )
+    missing = [key for key in spec.get("required", ()) if key not in params]
+    if missing:
+        raise ValueError(
+            f"步骤 {step!r} 缺少必填参数 {', '.join(missing)}；可用: {', '.join(allowed)}"
         )
 
     if spec.get("python"):
         return _run_plot(params)
 
-    path = spec["script"]
+    script_param = spec.get("scriptParam")
+    path = params[script_param] if script_param else spec["script"]
     res = run_file(get_session(), path, build_preamble(step, params))
     show(res, f"result of step {step} ({os.path.basename(path)})")
     return res
