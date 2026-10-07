@@ -40,6 +40,10 @@ Available actions and params (params not marked "required" may be omitted; omitt
     Alphas of all families share the dfs://gtja/alpha table, distinguished by the alphaId prefix (ja / ...),
     so backtest01 / backtest02 / plot need not care which family an alpha comes from; just pass alpha_id directly.
 
+    The backtest .dos scripts do NOT write files on the server (that failed when the server-side OUT_DIR did not exist).
+    Instead they return the result tables / JSON to the client, and run.py persists them under out_dir — a **client-side**
+    path — as CSV / JSON. This works with a remote server and never touches the server's file system.
+
     upload_mock_data generates a CSV "with the same header as data_csv and values being simulated movement" (default data_mock/data_mock.csv),
     and automatically uploads/persists it (reusing upload_csv_data).
     upload_csv_data reads the csv into a DataFrame and uploads it as a session variable (the variable name is an internal constant of the action, no need to specify externally),
@@ -50,6 +54,8 @@ import importlib.util
 import json
 import os
 import sys
+
+import pandas as pd
 
 import config
 from ddb import run_file, show, get_session
@@ -94,11 +100,14 @@ def _ddb_literal(value):
     raise ValueError(f"params only supports bool/int/float/str/list, got {value!r} ({type(value).__name__})")
 
 
-def _run_dos(action, script, params, mapping, dos_modules=[]):
+def _run_dos(action, script, params, mapping, dos_modules=[], show_result=True):
     """Run one .dos action: map params to DolphinDB variables, build the preamble, and run it at the very front of the script.
 
     The preamble always carries the connection credentials (taken from config); the .dos uses if (!defined()) as a fallback,
     so running the same script standalone (VS Code plugin) won't be missing variables either.
+
+    The script's value is returned to the client by run(); show_result=False lets the caller print a curated
+    summary instead of dumping the whole (possibly large) result object.
     """
     cred = (
         f"DB_USER = {_ddb_literal(config.ddb_username)};\n"
@@ -113,8 +122,34 @@ def _run_dos(action, script, params, mapping, dos_modules=[]):
     print(f"DB_USER = {config.ddb_username}; DB_PASSWORD = ***;")   # do not echo the password
     print(preamble.rstrip() if preamble else "(no other params)")
     res = run_file(get_session(dos_modules), script, cred + preamble)
-    show(res, f"result of action {action} ({os.path.basename(script)})")
+    if show_result:
+        show(res, f"result of action {action} ({os.path.basename(script)})")
     return res
+
+
+def _save_tables(out_dir, mapping):
+    """Write tables returned by a .dos to CSV files on the **client** file system.
+
+    The .dos scripts no longer call saveText (which writes on the *server* machine and fails when that
+    directory does not exist there); instead they return the tables to the client and run.py persists them here.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    for name, obj in mapping.items():
+        if obj is None:
+            continue
+        path = os.path.join(out_dir, name)
+        df = obj if isinstance(obj, pd.DataFrame) else pd.DataFrame(obj)
+        df.to_csv(path, index=False)
+        print(f"saved {path}")
+
+
+def _save_text(out_dir, name, text):
+    """Write a text artifact (e.g. a JSON string) returned by a .dos to the **client** file system."""
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, name)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(f"saved {path}")
 
 
 def _check_params(action, params, required=(), optional=()):
@@ -174,18 +209,28 @@ def action_backtest01(params, get_session):
         required=("dos",),
         optional=("alpha_id", "groups", "ret_clip", "db_uri", "tb_mkt", "tb_alpha", "out_dir"),
     )
-    # Explicitly fall back for out_dir before injection: the base session is reused by multiple actions, avoiding carrying over the OUT_DIR left by the previous script
+    # Explicitly fall back for out_dir: this is a **client-side** directory that run.py writes to after the .dos returns the tables
     out_dir = params.get("out_dir") or os.path.join(config.project_root, "backtest01", "output")
     params = {**params, "dos": _abs(params["dos"]), "out_dir": _abs(out_dir)}
-    return _run_dos(
+    res = _run_dos(
         "backtest01",
         params["dos"],
         params,
         {
             "alpha_id": "ALPHA_ID", "groups": "G", "ret_clip": "RET_CLIP",
-            "db_uri": "DB_URI", "tb_mkt": "TB_MKT", "tb_alpha": "TB_ALPHA", "out_dir": "OUT_DIR",
+            "db_uri": "DB_URI", "tb_mkt": "TB_MKT", "tb_alpha": "TB_ALPHA",
         },
+        show_result=False,
     )
+    alpha_id = params.get("alpha_id", "ja1")
+    if isinstance(res, dict):
+        _save_tables(params["out_dir"], {
+            f"bt_{alpha_id}_daily.csv": res.get("daily"),
+            f"bt_{alpha_id}_nav.csv": res.get("nav"),
+        })
+        show(res.get("ls"), f"long-short portfolio of alpha {alpha_id}")
+        return res.get("stats")
+    return res
 
 
 def action_backtest02(params, get_session):
@@ -195,18 +240,28 @@ def action_backtest02(params, get_session):
         required=("dos",),
         optional=("alpha_id", "ret_clip", "db_uri", "tb_mkt", "tb_alpha", "out_dir"),
     )
-    # Same as above: explicitly fall back for out_dir, to avoid carrying over another backtest script's OUT_DIR when reusing the base session
+    # Same as above: out_dir is a **client-side** directory written by run.py after the .dos returns the tables
     out_dir = params.get("out_dir") or os.path.join(config.project_root, "backtest02", "output")
     params = {**params, "dos": _abs(params["dos"]), "out_dir": _abs(out_dir)}
-    return _run_dos(
+    res = _run_dos(
         "backtest02",
         params["dos"],
         params,
         {
             "alpha_id": "ALPHA_ID", "ret_clip": "RET_CLIP",
-            "db_uri": "DB_URI", "tb_mkt": "TB_MKT", "tb_alpha": "TB_ALPHA", "out_dir": "OUT_DIR",
+            "db_uri": "DB_URI", "tb_mkt": "TB_MKT", "tb_alpha": "TB_ALPHA",
         },
+        show_result=False,
     )
+    alpha_id = params.get("alpha_id", "ja1")
+    if isinstance(res, dict):
+        _save_tables(params["out_dir"], {
+            f"ic_{alpha_id}_daily.csv": res.get("icTb"),
+            f"ic_{alpha_id}_summary.csv": res.get("summary"),
+        })
+        show(res.get("summary"), f"IC summary of alpha {alpha_id}")
+        return res.get("summary")
+    return res
 
 
 def action_backtest03(params, get_session):
@@ -216,15 +271,20 @@ def action_backtest03(params, get_session):
         required=("dos", "expression"),
         optional=("ret_clip", "db_uri", "tb_mkt", "out_dir"),
     )
-    # Explicitly fall back for out_dir, to avoid carrying over the OUT_DIR left by another script when reusing the base session
+    # Explicitly fall back for out_dir: this is a **client-side** directory, written by run.py after the .dos returns the JSON
     out_dir = params.get("out_dir") or os.path.join(config.project_root, "backtest03", "output")
     params = {**params, "dos": _abs(params["dos"]), "out_dir": _abs(out_dir)}
-    return _run_dos(
+    res = _run_dos(
         "backtest03",
         params["dos"],
         params,
-        {"expression": "EXPRESSION", "ret_clip": "RET_CLIP", "db_uri": "DB_URI", "tb_mkt": "TB_MKT", "out_dir": "OUT_DIR"},
+        {"expression": "EXPRESSION", "ret_clip": "RET_CLIP", "db_uri": "DB_URI", "tb_mkt": "TB_MKT"},
+        show_result=False,
     )
+    if isinstance(res, str):
+        _save_text(params["out_dir"], "eval_result.json", res)
+    show(res, "backtest03 result")
+    return res
 
 
 def action_plot(params, get_session):

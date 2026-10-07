@@ -99,8 +99,6 @@ metrics
 
 // ---- Manually build JSON to lock the order: {"expression":...,"metrics":{"Mean Rank IC":...,"IC Volatility":...,"ICIR (Information Ratio)":...,"Total Trading Days":...}} ----
 js = '{"expression":' + toStdJson(EXPRESSION) + ',"metrics":{"Mean Rank IC":' + string(metrics["Mean Rank IC"]) + ',"IC Volatility":' + string(metrics["IC Volatility"]) + ',"ICIR (Information Ratio)":' + string(metrics["ICIR (Information Ratio)"]) + ',"Total Trading Days":' + string(metrics["Total Trading Days"]) + '}}'
-saveText([js], OUT_DIR + "/eval_result.json")
-print("saved to " + OUT_DIR + "/eval_result.json")
 
-// Return metrics (run.py will print)
-metrics
+// Return the JSON string to the client (run.py writes it to a local file; no server-side saveText)
+js

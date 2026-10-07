@@ -1,5 +1,6 @@
 {
-    "project_root": "C:/d/hub/dolphin",
+    "project_root": "/home/ricky/d/hub/dolphin",
+	"project_root_win": "C:/d/hub/dolphin",
     "ddb_host": "127.0.0.1",
     "ddb_port": 8848,
     "ddb_username": "admin",

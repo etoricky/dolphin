@@ -3,7 +3,7 @@
  *     - Read any alpha from dfs://gtja/alpha + market close price
  *     - Daily cross-sectional corr(alpha, next-day return) -> IC; rank the cross-section then corr -> RankIC
  *     - Summarize IC / RankIC mean, std dev, ICIR, t-stat, win rate, days
- *     - Daily IC series and summary written to CSV in OUT_DIR
+ *     - Returns the daily IC series and summary to the client; run.py writes them to CSV locally (no server-side file I/O)
  *   Change the ALPHA_ID variable to backtest a different alpha.
  *
  *   Consistent with backtest01 (quantile nav): both use next-day return move(close,-1)/close-1 and apply RET_CLIP winsorization.
@@ -72,10 +72,5 @@ summary = select
 print("---- IC / RankIC / ICIR  alpha=" + ALPHA_ID + " ----")
 summary
 
-// ---------------- Save ----------------
-saveText(icTb,    OUT_DIR + "/ic_" + ALPHA_ID + "_daily.csv")
-saveText(summary, OUT_DIR + "/ic_" + ALPHA_ID + "_summary.csv")
-print("saved to " + OUT_DIR)
-
-// Return summary table (run.py will print)
-summary
+// Return the result tables to the client (run.py writes them to local CSV; no server-side saveText)
+dict(["icTb", "summary"], [icTb, summary])

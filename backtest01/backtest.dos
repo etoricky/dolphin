@@ -4,7 +4,7 @@
  *     - Each day, split the whole market into G groups by alpha value (0=smallest, G-1=largest)
  *     - Compute each group's equal-weighted daily return, cumulative nav, annualized return/volatility/sharpe, max drawdown
  *     - Additionally output the "long-short portfolio" (largest group - smallest group)
- *     - Results written to CSV in the output/ directory, for easy plotting
+ *     - Returns the result tables to the client; run.py writes them to CSV locally (no server-side file I/O)
  *   Change the ALPHA_ID variable to backtest a different alpha.
  *
  *   Note: data_full.csv is DolphinDB's official synthetic data for "validating alpha calculation",
@@ -98,10 +98,5 @@ res.drawdown
 print("---- Long-short portfolio (top - bottom) ----")
 res.ls
 
-// ---------------- Save ----------------
-saveText(res.daily, OUT_DIR + "/bt_" + ALPHA_ID + "_daily.csv")
-saveText(res.nav,   OUT_DIR + "/bt_" + ALPHA_ID + "_nav.csv")
-print("saved to " + OUT_DIR)
-
-// Return stats table (run.py will print)
-res.stats
+// Return the result tables to the client (run.py writes them to local CSV; no server-side saveText)
+res

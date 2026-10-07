@@ -236,6 +236,24 @@ The mean single-day return is +181%, with a standard deviation of 381; backtesti
 
 **Conclusion: the backtest numbers only prove the pipeline runs; they have no strategic meaning. To see real results you must switch to real market data.**
 
+### 5.7 Backtest outputs are written on the client, not the server
+
+The backtest `.dos` scripts used to call `saveText(..., OUT_DIR + "/...")`, which writes on the **server** machine.
+When the server-side `OUT_DIR` does not exist this fails at run time
+(`saveText(...) => Cannot open file [...]: No such file or directory`) even though the computation itself succeeded.
+
+So the backtests no longer persist anything on the server. Instead:
+
+- `backtest01/backtest.dos` returns its `dict(`daily`nav`stats`drawdown`ls, ...)` to the client;
+- `backtest02/backtest.dos` returns `dict(["icTb", "summary"], ...)`;
+- `backtest03/backtest.dos` returns the result JSON string (`js`).
+
+`run.py` receives that value from `session.run()`, writes it under `out_dir` (a **client-side** path, resolved by `_abs`)
+and prints a curated summary (`_run_dos(..., show_result=False)` + `_save_tables` / `_save_text`).
+DolphinDB tables come back as pandas `DataFrame`s and are written with `to_csv`, so `plot.py` is unaffected.
+This means there is no `OUT_DIR` variable injected into the backtest scripts any more, and the whole pipeline works even
+against a remote DolphinDB whose file system is not accessible from the client.
+
 ---
 
 ## 6. DolphinDB Syntax Notes
